@@ -3,7 +3,7 @@
 import { useDB } from "@/lib/store"
 import { KONTAKTER } from "@/lib/data"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, MessageSquare, PhoneCall, CheckCheck } from "lucide-react"
+import { Calendar, MessageSquare, PhoneCall, CheckCheck, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const SEKTIONER = [
@@ -60,21 +60,25 @@ export default function KundkontaktPage() {
               ) : (
                 KONTAKTER[key].map((k, i) => {
                   const logKey = `${key}-${k.name}`
-                  const done = !!contactLog[logKey]
+                  const status = contactLog[logKey]
+                  const isContacted = status === "contacted"
+                  const isConfirmed = status === "confirmed"
                   return (
                     <button
                       key={i}
                       onClick={() => toggleContact(logKey)}
                       className={cn(
                         "w-full flex items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-colors text-left",
-                        done
+                        isConfirmed
                           ? "border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-900/10"
+                          : isContacted
+                          ? "border-yellow-200 dark:border-yellow-900/40 bg-yellow-50/50 dark:bg-yellow-900/10"
                           : "border-border/60 bg-card hover:bg-muted/30"
                       )}
                     >
-                      <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", done ? "bg-emerald-500" : dot)} />
+                      <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", isConfirmed ? "bg-emerald-500" : isContacted ? "bg-yellow-400" : dot)} />
                       <div className="flex-1 min-w-0">
-                        <p className={cn("text-sm font-medium", done ? "line-through text-muted-foreground" : "text-foreground")}>
+                        <p className={cn("text-sm font-medium", isConfirmed ? "line-through text-muted-foreground" : "text-foreground")}>
                           {k.name}
                         </p>
                         <p className="text-xs text-muted-foreground">{k.day}</p>
@@ -82,7 +86,8 @@ export default function KundkontaktPage() {
                           <p className="text-xs text-muted-foreground/70 mt-0.5">{k.note}</p>
                         )}
                       </div>
-                      {done && <CheckCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />}
+                      {isConfirmed && <CheckCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />}
+                      {isContacted && <Clock className="h-3.5 w-3.5 text-yellow-500 shrink-0 mt-0.5" />}
                     </button>
                   )
                 })

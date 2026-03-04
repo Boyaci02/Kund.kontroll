@@ -88,7 +88,7 @@ export interface SMSMall {
 export interface DB {
   clients: Kund[]
   obState: OnboardingTillstand
-  contactLog: Record<string, boolean>
+  contactLog: Record<string, "contacted" | "confirmed">
   schedule: Veckoschema | null
   nextId: number
 }

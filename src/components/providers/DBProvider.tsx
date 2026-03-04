@@ -160,10 +160,20 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   const toggleContact = useCallback(
     (key: string) => {
-      update((prev) => ({
-        ...prev,
-        contactLog: { ...(prev.contactLog ?? {}), [key]: !(prev.contactLog ?? {})[key] },
-      }))
+      update((prev) => {
+        const log = prev.contactLog ?? {}
+        const current = log[key]
+        let next: "contacted" | "confirmed" | undefined
+        if (!current) next = "contacted"
+        else if (current === "contacted") next = "confirmed"
+        else next = undefined
+
+        const updated = { ...log }
+        if (next) updated[key] = next
+        else delete updated[key]
+
+        return { ...prev, contactLog: updated }
+      })
     },
     [update]
   )
