@@ -6,22 +6,25 @@ import { Topbar } from "./Topbar"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect } from "react"
 
+const PUBLIC_ROUTES = ["/login", "/hemsidor/onboarding", "/hemsidor/forfragan"]
+
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
   const isLoginPage = pathname === "/login"
+  const isPublicRoute = PUBLIC_ROUTES.some(r => pathname.startsWith(r))
 
   useEffect(() => {
-    if (!user && !isLoginPage) {
+    if (!user && !isPublicRoute) {
       router.replace("/login")
     }
     if (user && isLoginPage) {
       router.replace("/")
     }
-  }, [user, isLoginPage, router])
+  }, [user, isPublicRoute, isLoginPage, router])
 
-  // Login page — no sidebar
+  // Public routes (login, public forms) — no sidebar
   if (!user) {
     return <>{children}</>
   }

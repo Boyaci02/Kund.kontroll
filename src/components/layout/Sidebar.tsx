@@ -17,6 +17,7 @@ import {
   Clapperboard,
   ChevronDown,
   TrendingUp,
+  Globe,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./ThemeToggle"
@@ -39,6 +40,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/sms-mallar", label: "SMS-mallar", icon: MessageSquare },
   { separator: true },
   { href: "/content", label: "Content Creation", icon: Clapperboard },
+  { separator: true },
+  { href: "/hemsidor", label: "Hemsidor", icon: Globe },
 ]
 
 const TEAM = [
