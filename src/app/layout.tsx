@@ -1,8 +1,9 @@
 import type { Metadata } from "next"
 import "./globals.css"
 import { ThemeProvider } from "next-themes"
-import { Sidebar } from "@/components/layout/Sidebar"
 import { DBProvider } from "@/components/providers/DBProvider"
+import { AuthProvider } from "@/components/providers/AuthProvider"
+import { AuthGuard } from "@/components/layout/AuthGuard"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
@@ -22,12 +23,11 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <DBProvider>
             <TooltipProvider>
-              <div className="flex min-h-screen">
-                <Sidebar />
-                <main className="flex-1 ml-60 min-h-screen bg-background">
+              <AuthProvider>
+                <AuthGuard>
                   {children}
-                </main>
-              </div>
+                </AuthGuard>
+              </AuthProvider>
               <Toaster richColors position="bottom-right" />
             </TooltipProvider>
           </DBProvider>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useDB } from "@/lib/store"
+import { useAuth } from "@/components/providers/AuthProvider"
 import { KONTAKTER } from "@/lib/data"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, UserCheck, UserMinus, MessageSquare, PhoneCall, Camera, CalendarClock } from "lucide-react"
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button"
 
 export default function OversiktPage() {
   const { db } = useDB()
+  const { user } = useAuth()
   const clients = db.clients
   const aktiva = clients.filter((c) => c.st === "AKTIV").length
   const inaktiva = clients.filter((c) => c.st === "INAKTIV").length
@@ -34,7 +36,7 @@ export default function OversiktPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Översikt</h1>
-        <p className="text-sm text-muted-foreground mt-1">Välkommen tillbaka, Emanuel</p>
+        <p className="text-sm text-muted-foreground mt-1">Välkommen tillbaka, {user?.name ?? "Emanuel"}</p>
       </div>
 
       {/* Stats */}
