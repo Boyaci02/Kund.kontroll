@@ -4,18 +4,17 @@ import { useMemo, useEffect, useCallback } from "react"
 import { useDB } from "@/lib/store"
 import { useAuth } from "@/components/providers/AuthProvider"
 import { useGoogleCalendar, type NewCalendarEvent } from "@/hooks/useGoogleCalendar"
-import { OB_STEG, KONTAKTER } from "@/lib/data"
+import { OB_STEG } from "@/lib/data"
 import { TEAM_FARGER } from "@/lib/types"
 import { CalendarGrid } from "@/components/ui/CalendarGrid"
 import {
   Users,
   UserCheck,
   UserMinus,
-  MessageSquare,
-  PhoneCall,
   ClipboardCheck,
   CalendarClock,
   ArrowRight,
+  Film,
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -93,6 +92,10 @@ export default function OversiktPage() {
     return result.slice(0, 8)
   }, [clients, db.obState, user])
 
+  const myInspelningar = user
+    ? clients.filter((c) => c.st === "AKTIV" && (c.vg === user.name || c.ed === user.name || c.cc === user.name)).length
+    : 0
+
   const kommandeSMS = clients.filter((c) => c.ns && c.st === "AKTIV").slice(0, 8)
 
   async function handleAddToCalendar(kund: Kund, date: Date) {
@@ -144,12 +147,17 @@ export default function OversiktPage() {
           color="text-muted-foreground"
         />
         <StatPill
-          icon={MessageSquare}
-          value={KONTAKTER.sms.length}
-          label="SMS denna månad"
+          icon={ClipboardCheck}
+          value={myTasks.length}
+          label="Mina uppgifter"
           color="text-primary"
         />
-        <StatPill icon={PhoneCall} value={KONTAKTER.quarterly.length} label="Kvartalsamtal" />
+        <StatPill
+          icon={Film}
+          value={myInspelningar}
+          label="Mina inspelningar"
+          color="text-amber-500"
+        />
       </div>
 
       {/* Main grid: Mina uppgifter + Kalender */}

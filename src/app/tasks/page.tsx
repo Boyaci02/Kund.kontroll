@@ -139,7 +139,7 @@ export default function TasksPage() {
 
       {/* Tab: Onboarding — one table per team member */}
       {tab === "onboarding" && (
-        <div className="space-y-6">
+        <div className="space-y-4 max-w-4xl">
           {/* Summary bar */}
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <ClipboardCheck className="h-4 w-4" />
@@ -169,19 +169,16 @@ export default function TasksPage() {
               return (
                 <div key={member}>
                   {/* Member header */}
-                  <div className="flex items-center gap-2.5 mb-2">
+                  <div className="flex items-center gap-2 mb-1.5">
                     <div
-                      className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                      className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
                       style={{ background: memberColor }}
                     >
                       {member[0]}
                     </div>
-                    <span className="text-sm font-semibold text-foreground">{member}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {doneMember}/{tasks.length} klara
-                    </span>
-                    {/* Mini progress */}
-                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-32">
+                    <span className="text-xs font-semibold text-foreground">{member}</span>
+                    <span className="text-[10px] text-muted-foreground">{doneMember}/{tasks.length} klara</span>
+                    <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden max-w-24">
                       <div
                         className="h-full rounded-full transition-all"
                         style={{
@@ -197,14 +194,14 @@ export default function TasksPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border bg-muted/40">
-                          <th className="w-8 px-3 py-2.5" />
-                          <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                          <th className="w-8 px-3 py-1.5" />
+                          <th className="text-left px-3 py-1.5 text-xs font-semibold text-muted-foreground">
                             Uppgift
                           </th>
-                          <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground hidden sm:table-cell">
+                          <th className="text-left px-3 py-1.5 text-xs font-semibold text-muted-foreground hidden sm:table-cell">
                             Steg
                           </th>
-                          <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                          <th className="text-right px-3 py-1.5 text-xs font-semibold text-muted-foreground">
                             Kund
                           </th>
                         </tr>
@@ -215,13 +212,13 @@ export default function TasksPage() {
                             key={`${task.kund.id}-${task.id}`}
                             className="border-b border-border/60 hover:bg-muted/20 transition-colors"
                           >
-                            <td className="px-3 py-2.5">
+                            <td className="px-3 py-1">
                               <Checkbox
                                 checked={task.done}
                                 onCheckedChange={() => toggleTask(task.kund.id, task.id)}
                               />
                             </td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-3 py-1">
                               <span
                                 className={cn(
                                   "text-xs",
@@ -231,12 +228,12 @@ export default function TasksPage() {
                                 {task.text}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 hidden sm:table-cell">
+                            <td className="px-3 py-1 hidden sm:table-cell">
                               <span className="text-[10px] text-muted-foreground">
                                 Steg {task.stepN}: {task.stepTitle}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 text-right">
+                            <td className="px-3 py-1 text-right">
                               <button
                                 onClick={() => router.push(`/kunder/${task.kund.id}`)}
                                 className="text-xs font-medium text-foreground hover:text-primary hover:underline transition-colors"
@@ -258,7 +255,7 @@ export default function TasksPage() {
 
       {/* Tab: Inspelning */}
       {tab === "inspelning" && (
-        <div className="space-y-6">
+        <div className="space-y-4 max-w-4xl">
           {videoClients.length === 0 && editClients.length === 0 && ccClients.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
               Inga inspelningsuppgifter tilldelade för vald person
@@ -315,19 +312,19 @@ function RecordingSection({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+              <th className="text-left px-4 py-1.5 text-xs font-semibold text-muted-foreground">
                 Kund
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+              <th className="text-left px-4 py-1.5 text-xs font-semibold text-muted-foreground">
                 Paket
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+              <th className="text-left px-4 py-1.5 text-xs font-semibold text-muted-foreground">
                 Status
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+              <th className="text-left px-4 py-1.5 text-xs font-semibold text-muted-foreground">
                 Nästa inspelning
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">
+              <th className="text-left px-4 py-1.5 text-xs font-semibold text-muted-foreground">
                 {roleLabel}
               </th>
             </tr>
@@ -342,8 +339,8 @@ function RecordingSection({
                   key={c.id}
                   className="border-b border-border/60 hover:bg-muted/20 transition-colors"
                 >
-                  <td className="px-4 py-2.5 font-medium text-foreground">{c.name}</td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-1 font-medium text-foreground text-xs">{c.name}</td>
+                  <td className="px-4 py-1">
                     {c.pkg ? (
                       <span
                         className={cn(
@@ -357,7 +354,7 @@ function RecordingSection({
                       <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-1">
                     {c.st ? (
                       <span
                         className={cn(
@@ -372,8 +369,8 @@ function RecordingSection({
                       "-"
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-muted-foreground">{c.nr || "-"}</td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-1 text-xs text-muted-foreground">{c.nr || "-"}</td>
+                  <td className="px-4 py-1">
                     <div className="flex items-center gap-2">
                       <div
                         className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
