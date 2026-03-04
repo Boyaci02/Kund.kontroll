@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { useDB } from "@/lib/store"
+import { useRouter } from "next/navigation"
 import { paketClass, statusClass, statusLabel } from "@/lib/helpers"
 import type { Kund, Paket, Status } from "@/lib/types"
 import { TEAM_FARGER, TEAM_MEDLEMMAR, PAKET_LISTA } from "@/lib/types"
@@ -23,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, Pencil, Trash2, Eye } from "lucide-react"
+import { Plus, Search, Pencil, Trash2, ExternalLink } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -82,12 +83,11 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 
 export default function KunderPage() {
   const { db, addKund, updateKund, deleteKund } = useDB()
+  const router = useRouter()
   const [filter, setFilter] = useState<Filter>("all")
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
-  const [detailOpen, setDetailOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [detailId, setDetailId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<Kund, "id">>(EMPTY_KUND)
 
@@ -118,12 +118,6 @@ export default function KunderPage() {
     setEditingId(id)
     setForm({ ...c })
     setModalOpen(true)
-    setDetailOpen(false)
-  }
-
-  function openDetail(id: number) {
-    setDetailId(id)
-    setDetailOpen(true)
   }
 
   function handleSave() {
@@ -146,8 +140,6 @@ export default function KunderPage() {
     setDeleteId(null)
     toast.success("Kund borttagen")
   }
-
-  const detailKund = db.clients.find((c) => c.id === detailId)
 
   return (
     <div className="p-8 space-y-6">
@@ -218,7 +210,7 @@ export default function KunderPage() {
                 <tr
                   key={c.id}
                   className="border-b border-border/60 hover:bg-muted/30 cursor-pointer transition-colors"
-                  onClick={() => openDetail(c.id)}
+                  onClick={() => router.push(`/kunder/${c.id}`)}
                 >
                   <td className="px-4 py-3 font-medium text-foreground">{c.name}</td>
                   <td className="px-4 py-3">
@@ -384,66 +376,6 @@ export default function KunderPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>Avbryt</Button>
             <Button onClick={handleSave}>{editingId ? "Spara" : "Lägg till"}</Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Detail Modal */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-lg">
-          {detailKund && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-lg">{detailKund.name}</DialogTitle>
-              </DialogHeader>
-              <div className="grid grid-cols-2 gap-4 py-4 text-sm">
-                {[
-                  { label: "Paket", value: detailKund.pkg ? (
-                    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", paketClass(detailKund.pkg))}>
-                      {detailKund.pkg}
-                    </span>
-                  ) : "-" },
-                  { label: "Status", value: detailKund.st ? (
-                    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium", statusClass(detailKund.st))}>
-                      <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                      {statusLabel(detailKund.st)}
-                    </span>
-                  ) : "-" },
-                  { label: "Videograf", value: detailKund.vg || "-" },
-                  { label: "Redigerare", value: detailKund.ed || "-" },
-                  { label: "Content Creator", value: detailKund.cc || "-" },
-                  { label: "Kontaktperson", value: detailKund.cnt || "-" },
-                  { label: "Telefon / Mail", value: detailKund.ph || "-" },
-                  { label: "Senaste inspelning", value: detailKund.lr || "-" },
-                  { label: "Nästa inspelning", value: detailKund.nr || "-" },
-                  { label: "Nästa SMS", value: detailKund.ns || "-" },
-                ].map(({ label, value }) => (
-                  <div key={label}>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">{label}</p>
-                    <div>{value}</div>
-                  </div>
-                ))}
-                {detailKund.adr && (
-                  <div className="col-span-2">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Adress</p>
-                    <p>{detailKund.adr}</p>
-                  </div>
-                )}
-                {detailKund.notes && (
-                  <div className="col-span-2">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Anteckningar</p>
-                    <p className="bg-muted rounded-xl px-3 py-2 text-sm whitespace-pre-wrap">{detailKund.notes}</p>
-                  </div>
-                )}
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDetailOpen(false)}>Stäng</Button>
-                <Button onClick={() => openEdit(detailKund.id)}>
-                  <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                  Redigera
-                </Button>
-              </DialogFooter>
-            </>
-          )}
         </DialogContent>
       </Dialog>
 

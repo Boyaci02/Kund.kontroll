@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/components/providers/AuthProvider"
 import { Sidebar } from "./Sidebar"
+import { Topbar } from "./Topbar"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect } from "react"
 
@@ -29,9 +30,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 ml-60 min-h-screen bg-background">
-        {children}
-      </main>
+      <div className="flex-1 ml-60 flex flex-col min-h-screen">
+        <Topbar />
+        <main className="flex-1 bg-background">
+          {children}
+        </main>
+      </div>
     </div>
   )
 }
