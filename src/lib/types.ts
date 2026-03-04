@@ -124,3 +124,12 @@ export const PAKET_LISTA: Paket[] = [
   "Extra Stort Paket",
   "Special Paket",
 ]
+
+// Airtable Content Creation types
+export type AirtableStatus = "Todo" | "In progress" | "Done" | ""
+
+export interface AirtableRecord {
+  id: string
+  fields: Record<string, string | undefined>
+  createdTime: string
+}

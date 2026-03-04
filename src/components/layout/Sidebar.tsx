@@ -13,6 +13,7 @@ import {
   Upload,
   ClipboardList,
   LogOut,
+  Clapperboard,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./ThemeToggle"
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { href: "/veckoplanering", label: "Veckoplanering", icon: Calendar },
   { href: "/kundkontakt", label: "Kundkontakt", icon: PhoneCall },
   { href: "/sms-mallar", label: "SMS-mallar", icon: MessageSquare },
+  { href: "/content", label: "Content Creation", icon: Clapperboard },
 ]
 
 const TEAM = [
