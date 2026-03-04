@@ -84,20 +84,50 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   const updateKund = useCallback(
     (kund: Kund) => {
-      update((prev) => ({
-        ...prev,
-        clients: prev.clients.map((c) => (c.id === kund.id ? kund : c)),
-      }))
+      update((prev) => {
+        const old = prev.clients.find((c) => c.id === kund.id)
+        const nameChanged = old && old.name !== kund.name
+        let schedule = prev.schedule
+        if (nameChanged && schedule) {
+          const oldName = old!.name
+          const newName = kund.name
+          schedule = {
+            v1: schedule.v1.map((n) => (n === oldName ? newName : n)),
+            v2: schedule.v2.map((n) => (n === oldName ? newName : n)),
+            v3: schedule.v3.map((n) => (n === oldName ? newName : n)),
+            v4: schedule.v4.map((n) => (n === oldName ? newName : n)),
+          }
+        }
+        return {
+          ...prev,
+          clients: prev.clients.map((c) => (c.id === kund.id ? kund : c)),
+          schedule,
+        }
+      })
     },
     [update]
   )
 
   const deleteKund = useCallback(
     (id: number) => {
-      update((prev) => ({
-        ...prev,
-        clients: prev.clients.filter((c) => c.id !== id),
-      }))
+      update((prev) => {
+        const kund = prev.clients.find((c) => c.id === id)
+        let schedule = prev.schedule
+        if (kund && schedule) {
+          const name = kund.name
+          schedule = {
+            v1: schedule.v1.filter((n) => n !== name),
+            v2: schedule.v2.filter((n) => n !== name),
+            v3: schedule.v3.filter((n) => n !== name),
+            v4: schedule.v4.filter((n) => n !== name),
+          }
+        }
+        return {
+          ...prev,
+          clients: prev.clients.filter((c) => c.id !== id),
+          schedule,
+        }
+      })
     },
     [update]
   )

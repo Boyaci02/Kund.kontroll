@@ -1,7 +1,7 @@
 "use client"
 
 import { useParams, useRouter } from "next/navigation"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useDB } from "@/lib/store"
 import { useAuth } from "@/components/providers/AuthProvider"
 import { OB_STEG } from "@/lib/data"
@@ -154,7 +154,7 @@ export default function KundkortPage() {
   const kund = db.clients.find((c) => c.id === id)
 
   const [notes, setNotes] = useState(kund?.notes ?? "")
-  const [notesDirty, setNotesDirty] = useState(false)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [contentRecords, setContentRecords] = useState<AirtableRecord[]>([])
   const [contentLoading, setContentLoading] = useState(false)
@@ -209,11 +209,18 @@ export default function KundkortPage() {
   const doneTasks = allTasks.filter((t) => obState[t.id]).length
   const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
 
-  function handleSaveNotes() {
-    updateKund({ ...kund!, notes })
-    setNotesDirty(false)
-    toast.success("Anteckningar sparade")
-  }
+  // Autosave notes 2s after last keystroke
+  useEffect(() => {
+    if (!kund) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      if (notes !== kund.notes) {
+        updateKund({ ...kund, notes })
+      }
+    }, 2000)
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes])
 
   function handleSaveEdit() {
     if (!form.name.trim()) {
@@ -452,18 +459,11 @@ export default function KundkortPage() {
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Anteckningar
           </h2>
-          {notesDirty && (
-            <Button size="sm" onClick={handleSaveNotes} className="h-7 text-xs">
-              Spara
-            </Button>
-          )}
+          <span className="text-[10px] text-muted-foreground">Sparas automatiskt</span>
         </div>
         <Textarea
           value={notes}
-          onChange={(e) => {
-            setNotes(e.target.value)
-            setNotesDirty(e.target.value !== kund.notes)
-          }}
+          onChange={(e) => setNotes(e.target.value)}
           placeholder="Skriv anteckningar om kunden här..."
           rows={4}
           className="resize-none text-sm"
