@@ -1,21 +1,72 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { DBContext, loadDB, saveDB, getInitialDB } from "@/lib/store"
 import type { DB, Kund, Veckoschema } from "@/lib/types"
 import { SCHEMA } from "@/lib/data"
+import { supabase } from "@/lib/supabase"
 
 export function DBProvider({ children }: { children: React.ReactNode }) {
   const [db, setDB] = useState<DB>(getInitialDB)
+  const dbRef = useRef<DB>(getInitialDB())
 
   useEffect(() => {
-    setDB(loadDB())
+    async function init() {
+      // 1. Ladda lokalt direkt (ingen flash)
+      const local = loadDB()
+      setDB(local)
+      dbRef.current = local
+
+      // 2. Hämta från Supabase (source of truth)
+      const { data, error } = await supabase
+        .from("app_state")
+        .select("data")
+        .eq("id", "main")
+        .single()
+
+      if (!error && data?.data && Object.keys(data.data).length > 0) {
+        const remote = data.data as DB
+        setDB(remote)
+        dbRef.current = remote
+        saveDB(remote)
+      } else {
+        // Första gången — seed Supabase med lokala data
+        await supabase
+          .from("app_state")
+          .upsert({ id: "main", data: local, updated_at: new Date().toISOString() })
+      }
+    }
+
+    init()
+
+    // 3. Realtime-prenumeration
+    const channel = supabase
+      .channel("app_state_changes")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "app_state" },
+        (payload) => {
+          const remote = (payload.new as { data: DB }).data
+          setDB(remote)
+          dbRef.current = remote
+          saveDB(remote)
+        }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   const update = useCallback((updater: (prev: DB) => DB) => {
     setDB((prev) => {
       const next = updater(prev)
       saveDB(next)
+      dbRef.current = next
+      supabase.from("app_state").upsert({
+        id: "main",
+        data: next,
+        updated_at: new Date().toISOString(),
+      })
       return next
     })
   }, [])

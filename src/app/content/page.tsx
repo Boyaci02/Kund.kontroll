@@ -32,11 +32,6 @@ const SWEDISH_MONTHS: Record<string, number> = {
   juli: 7, augusti: 8, september: 9, oktober: 10, november: 11, december: 12,
 }
 
-const MONTH_NAMES = [
-  "", "Januari", "Februari", "Mars", "April", "Maj", "Juni",
-  "Juli", "Augusti", "September", "Oktober", "November", "December",
-]
-
 function parseMonthFromCategory(cat: string): number | null {
   const lower = cat.toLowerCase()
   for (const [name, num] of Object.entries(SWEDISH_MONTHS)) {
@@ -45,23 +40,28 @@ function parseMonthFromCategory(cat: string): number | null {
   return null
 }
 
-// Build list of months to display: 2 back + current + 3 forward
-function getDisplayMonths(): Array<{ key: string; month: number; year: number; label: string; isCurrent: boolean }> {
+function buildColumns(
+  recs: AirtableRecord[],
+  getCat: (r: AirtableRecord) => string
+): Array<{ key: string; label: string; monthNum: number | null; isCurrent: boolean }> {
   const now = new Date()
-  const result = []
-  for (let offset = -2; offset <= 3; offset++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1)
-    const month = d.getMonth() + 1
-    const year = d.getFullYear()
-    result.push({
-      key: `${year}-${String(month).padStart(2, "0")}`,
-      month,
-      year,
-      label: `${MONTH_NAMES[month]} ${year}`,
-      isCurrent: offset === 0,
+  const currentMonth = now.getMonth() + 1
+  const seen = new Set<string>()
+  recs.forEach((r) => {
+    const cat = getCat(r).trim()
+    if (cat) seen.add(cat)
+  })
+  return [...seen]
+    .map((cat) => {
+      const monthNum = parseMonthFromCategory(cat)
+      return { key: cat, label: cat, monthNum, isCurrent: monthNum === currentMonth }
     })
-  }
-  return result
+    .sort((a, b) => {
+      if (a.monthNum !== null && b.monthNum !== null) return a.monthNum - b.monthNum
+      if (a.monthNum !== null) return -1
+      if (b.monthNum !== null) return 1
+      return a.label.localeCompare(b.label, "sv")
+    })
 }
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
@@ -120,8 +120,6 @@ export default function ContentPage() {
   // Notes expand
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const displayMonths = getDisplayMonths()
-
   // ── Fetch records ──────────────────────────────────────────────────────────
   const fetchRecords = useCallback(async (clientName: string) => {
     const config = AIRTABLE_TABLE_MAP[clientName]
@@ -142,7 +140,7 @@ export default function ContentPage() {
     if (selectedClient) fetchRecords(selectedClient)
   }, [selectedClient, fetchRecords])
 
-  // ── Group records by month ─────────────────────────────────────────────────
+  // ── Group records by category ──────────────────────────────────────────────
   const config = AIRTABLE_TABLE_MAP[selectedClient]
   const monthFieldName = config?.monthFieldName ?? ""
 
@@ -150,18 +148,10 @@ export default function ContentPage() {
     return (r.fields[monthFieldName] ?? r.fields["Month"] ?? "") as string
   }
 
-  function getRecordsForMonth(monthNum: number): AirtableRecord[] {
-    return records.filter((r) => {
-      const cat = getCategoryForRecord(r)
-      return parseMonthFromCategory(cat) === monthNum
-    })
-  }
+  const columns = buildColumns(records, getCategoryForRecord)
 
-  // Records with no recognizable month (uncategorized)
-  const uncategorizedRecords = records.filter((r) => {
-    const cat = getCategoryForRecord(r)
-    return !cat || parseMonthFromCategory(cat) === null
-  })
+  // Records with empty category (truly uncategorized)
+  const uncategorizedRecords = records.filter((r) => !getCategoryForRecord(r).trim())
 
   // ── Dialog helpers ─────────────────────────────────────────────────────────
   function openCreate(category: string) {
@@ -190,7 +180,7 @@ export default function ContentPage() {
     try {
       if (editRecord) {
         // Update existing
-        await fetch("/api/airtable", {
+        const patchRes = await fetch("/api/airtable", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -203,6 +193,10 @@ export default function ContentPage() {
             },
           }),
         })
+        if (!patchRes.ok) {
+          const err = await patchRes.json().catch(() => ({}))
+          throw new Error(err?.error ?? `HTTP ${patchRes.status}`)
+        }
         toast.success("Uppdaterat!")
       } else {
         // Create new
@@ -212,17 +206,21 @@ export default function ContentPage() {
         }
         if (form.notes) fields["Notes"] = form.notes
         if (dialogCategory) fields[cfg.monthFieldName] = dialogCategory
-        await fetch("/api/airtable", {
+        const postRes = await fetch("/api/airtable", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tableId: cfg.tableId, fields }),
         })
+        if (!postRes.ok) {
+          const err = await postRes.json().catch(() => ({}))
+          throw new Error(err?.error ?? `HTTP ${postRes.status}`)
+        }
         toast.success("Skapat!")
       }
       setDialogOpen(false)
       fetchRecords(selectedClient)
-    } catch {
-      toast.error("Något gick fel")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Något gick fel")
     } finally {
       setSaving(false)
     }
@@ -234,16 +232,20 @@ export default function ContentPage() {
     if (!cfg) return
     setSaving(true)
     try {
-      await fetch("/api/airtable", {
+      const delRes = await fetch("/api/airtable", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tableId: cfg.tableId, recordId: editRecord.id }),
       })
+      if (!delRes.ok) {
+        const err = await delRes.json().catch(() => ({}))
+        throw new Error(err?.error ?? `HTTP ${delRes.status}`)
+      }
       toast.success("Borttaget")
       setDialogOpen(false)
       fetchRecords(selectedClient)
-    } catch {
-      toast.error("Kunde inte ta bort")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Kunde inte ta bort")
     } finally {
       setSaving(false)
     }
@@ -433,22 +435,16 @@ export default function ContentPage() {
           </div>
         ) : (
           <div className="flex gap-4 min-w-max pb-6">
-            {displayMonths.map(({ label, month, year, isCurrent }) => {
-              const monthRecords = getRecordsForMonth(month)
-              // Find the best category string to use for new records in this month
-              // Use an existing category from this month, or build one from MONTH_NAMES
-              const existingCat = monthRecords[0]
-                ? getCategoryForRecord(monthRecords[0])
-                : ""
-              const defaultCat = existingCat || `${MONTH_NAMES[month]} content`
+            {columns.map(({ key, label, isCurrent }) => {
+              const colRecords = records.filter((r) => getCategoryForRecord(r).trim() === key)
               return (
                 <MonthColumn
-                  key={`${year}-${month}`}
+                  key={key}
                   label={label}
-                  month={month}
+                  month={0}
                   isCurrent={isCurrent}
-                  monthRecords={monthRecords}
-                  categoryValue={defaultCat}
+                  monthRecords={colRecords}
+                  categoryValue={key}
                 />
               )
             })}

@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { ChevronLeft, ChevronRight, CalendarPlus } from "lucide-react"
+import { ChevronLeft, ChevronRight, CalendarPlus, Camera } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Kund } from "@/lib/types"
+import { TEAM_FARGER } from "@/lib/types"
 import type { CalendarEvent } from "@/hooks/useGoogleCalendar"
 
 // ─── Swedish month names ──────────────────────────────────────────────────────
@@ -25,11 +26,9 @@ function parseNrDates(nr: string, year: number): Date[] {
   if (["?", "avvakta", "planera inspelning", ""].includes(lower)) return []
 
   const dates: Date[] = []
-  // Split on "+" to handle "9 mars + 11 mars"
   const parts = nr.split("+").map((p) => p.trim())
 
   for (const part of parts) {
-    // Format: "10 mars", "4 mars"
     const dayMonth = part.match(/^(\d{1,2})\s+(\w+)$/i)
     if (dayMonth) {
       const day = parseInt(dayMonth[1])
@@ -40,7 +39,6 @@ function parseNrDates(nr: string, year: number): Date[] {
       continue
     }
 
-    // Format: "Mar V.2", "Mar V.3"
     const weekMatch = part.match(/^(\w+)\s+v\.?(\d)$/i)
     if (weekMatch) {
       const month = MONTH_MAP[weekMatch[1].toLowerCase()]
@@ -52,11 +50,6 @@ function parseNrDates(nr: string, year: number): Date[] {
     }
   }
   return dates
-}
-
-// ─── Format date to YYYY-MM-DD for Google Calendar ───────────────────────────
-function toYMD(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
 interface CalendarGridProps {
@@ -78,7 +71,7 @@ export function CalendarGrid({
     const d = new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
   })
-  const [selectedDay, setSelectedDay] = useState<number | null>(null)
+  const [selectedDay, setSelectedDay] = useState<number | null>(() => new Date().getDate())
 
   const year = currentMonth.getFullYear()
   const month = currentMonth.getMonth()
@@ -122,7 +115,7 @@ export function CalendarGrid({
   }, [googleEvents, year, month])
 
   // Build calendar cells
-  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7 // Mon=0
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const cells: (number | null)[] = [
     ...Array<null>(firstWeekday).fill(null),
@@ -131,29 +124,28 @@ export function CalendarGrid({
   while (cells.length % 7 !== 0) cells.push(null)
 
   const today = new Date()
-  const isCurrentMonth =
-    today.getFullYear() === year && today.getMonth() === month
+  const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month
 
-  // Selected day data
   const selectedClients = selectedDay !== null ? (clientsByDay.get(selectedDay) ?? []) : []
   const selectedEvents = selectedDay !== null ? (eventsByDay.get(selectedDay) ?? []) : []
+  const selectedDate = selectedDay !== null ? new Date(year, month, selectedDay) : null
 
   return (
     <div>
       {/* Navigation */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => navigate(-1)}
-          className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors text-muted-foreground"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span className="text-sm font-semibold text-foreground">
+        <span className="text-sm font-semibold text-foreground tracking-wide">
           {MONTH_NAMES[month]} {year}
         </span>
         <button
           onClick={() => navigate(1)}
-          className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors text-muted-foreground"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -164,7 +156,7 @@ export function CalendarGrid({
         {DAY_NAMES.map((d) => (
           <div
             key={d}
-            className="text-center text-[10px] font-semibold text-muted-foreground py-1"
+            className="text-center text-[10px] font-semibold text-muted-foreground py-1 uppercase tracking-wider"
           >
             {d}
           </div>
@@ -175,7 +167,7 @@ export function CalendarGrid({
       <div className="grid grid-cols-7 gap-0.5">
         {cells.map((day, i) => {
           if (day === null) {
-            return <div key={`pad-${i}`} className="min-h-[44px]" />
+            return <div key={`pad-${i}`} className="min-h-[52px]" />
           }
 
           const kundsOnDay = clientsByDay.get(day) ?? []
@@ -189,44 +181,69 @@ export function CalendarGrid({
               key={day}
               onClick={() => setSelectedDay(isSelected ? null : day)}
               className={cn(
-                "relative min-h-[44px] rounded-lg p-1 text-left transition-colors flex flex-col",
+                "relative min-h-[52px] rounded-xl p-1.5 text-left transition-all flex flex-col gap-0.5",
                 isSelected
-                  ? "bg-primary/10 ring-1 ring-primary/30"
-                  : "hover:bg-muted/50",
-                isToday && !isSelected && "ring-1 ring-primary"
+                  ? "bg-primary/10 ring-1 ring-primary/40"
+                  : hasActivity
+                  ? "hover:bg-muted/60"
+                  : "hover:bg-muted/30"
               )}
             >
+              {/* Date number */}
               <span
                 className={cn(
-                  "text-xs font-medium leading-none",
-                  isToday ? "text-primary font-bold" : "text-foreground",
-                  !hasActivity && "text-muted-foreground"
+                  "text-xs font-semibold leading-none w-5 h-5 flex items-center justify-center rounded-full shrink-0",
+                  isToday
+                    ? "bg-primary text-primary-foreground"
+                    : isSelected
+                    ? "text-primary"
+                    : hasActivity
+                    ? "text-foreground"
+                    : "text-muted-foreground"
                 )}
               >
                 {day}
               </span>
-              {/* Dots */}
-              <div className="flex flex-wrap gap-0.5 mt-1">
-                {kundsOnDay.slice(0, 3).map(({ kund }) => (
-                  <div
-                    key={kund.id}
-                    className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
-                    title={kund.name}
-                  />
-                ))}
-                {eventsOnDay.slice(0, 2).map((e) => (
-                  <div
-                    key={e.id}
-                    className="h-1.5 w-1.5 rounded-full bg-primary"
-                    title={e.summary}
-                  />
-                ))}
-                {kundsOnDay.length + eventsOnDay.length > 4 && (
-                  <span className="text-[8px] text-muted-foreground leading-none mt-0.5">
-                    +{kundsOnDay.length + eventsOnDay.length - 4}
+
+              {/* Activity indicators */}
+              {kundsOnDay.length === 1 && (
+                <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded px-0.5 truncate w-full">
+                  {kundsOnDay[0].kund.name.split(" ")[0]}
+                </span>
+              )}
+              {kundsOnDay.length === 2 && (
+                <>
+                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded px-0.5 truncate w-full">
+                    {kundsOnDay[0].kund.name.split(" ")[0]}
                   </span>
-                )}
-              </div>
+                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded px-0.5 truncate w-full">
+                    {kundsOnDay[1].kund.name.split(" ")[0]}
+                  </span>
+                </>
+              )}
+              {kundsOnDay.length >= 3 && (
+                <>
+                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded px-0.5 truncate w-full">
+                    {kundsOnDay[0].kund.name.split(" ")[0]}
+                  </span>
+                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 rounded px-0.5">
+                    +{kundsOnDay.length - 1} till
+                  </span>
+                </>
+              )}
+
+              {/* Google Calendar dot */}
+              {eventsOnDay.length > 0 && (
+                <div className="flex gap-0.5 mt-auto">
+                  {eventsOnDay.slice(0, 2).map((e) => (
+                    <div
+                      key={e.id}
+                      className="h-1.5 w-1.5 rounded-full bg-primary shrink-0"
+                      title={e.summary}
+                    />
+                  ))}
+                </div>
+              )}
             </button>
           )
         })}
@@ -242,8 +259,8 @@ export function CalendarGrid({
       {/* Legend */}
       <div className="flex items-center gap-4 mt-3">
         <div className="flex items-center gap-1.5">
-          <div className="h-2 w-2 rounded-full bg-muted-foreground/60" />
-          <span className="text-[10px] text-muted-foreground">Inspelning (kund)</span>
+          <div className="h-2 w-3 rounded bg-amber-100 dark:bg-amber-900/30" />
+          <span className="text-[10px] text-muted-foreground">Inspelning</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="h-2 w-2 rounded-full bg-primary" />
@@ -252,45 +269,96 @@ export function CalendarGrid({
       </div>
 
       {/* Selected day panel */}
-      {selectedDay !== null && (selectedClients.length > 0 || selectedEvents.length > 0) && (
-        <div className="mt-3 rounded-xl border border-border bg-muted/20 p-3 space-y-2">
-          <p className="text-xs font-semibold text-foreground">
-            {new Date(year, month, selectedDay).toLocaleDateString("sv-SE", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
-          </p>
+      {selectedDay !== null && selectedDate !== null && (selectedClients.length > 0 || selectedEvents.length > 0) && (
+        <div className="mt-3 rounded-xl border border-border bg-card p-4 space-y-3">
+          {/* Date heading */}
+          <div className="flex items-center gap-2">
+            <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center shrink-0">
+              <Camera className="h-3.5 w-3.5 text-primary-foreground" />
+            </div>
+            <p className="text-sm font-semibold text-foreground capitalize">
+              {selectedDate.toLocaleDateString("sv-SE", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
+          </div>
 
           {/* Client recordings */}
-          {selectedClients.map(({ kund, date }) => (
-            <div key={kund.id} className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-medium text-foreground">{kund.name}</p>
-                {kund.vg && (
-                  <p className="text-[10px] text-muted-foreground">VG: {kund.vg}</p>
-                )}
-              </div>
-              {onAddToCalendar && (
-                <button
-                  onClick={() => onAddToCalendar(kund, date)}
-                  className="flex items-center gap-1 text-[10px] text-primary hover:underline shrink-0"
-                  title="Lägg till i Google Kalender"
+          {selectedClients.length > 0 && (
+            <div className="space-y-2">
+              {selectedClients.map(({ kund, date }) => (
+                <div
+                  key={kund.id}
+                  className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/30 px-3 py-2.5"
                 >
-                  <CalendarPlus className="h-3 w-3" />
-                  Lägg till
-                </button>
-              )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{kund.name}</p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      {kund.vg && (
+                        <div className="flex items-center gap-1">
+                          <div
+                            className="h-3.5 w-3.5 rounded-full shrink-0"
+                            style={{ background: TEAM_FARGER[kund.vg] ?? "#9CA3AF" }}
+                          />
+                          <span className="text-[10px] text-muted-foreground">{kund.vg}</span>
+                        </div>
+                      )}
+                      {kund.ed && kund.ed !== kund.vg && (
+                        <div className="flex items-center gap-1">
+                          <div
+                            className="h-3.5 w-3.5 rounded-full shrink-0"
+                            style={{ background: TEAM_FARGER[kund.ed] ?? "#9CA3AF" }}
+                          />
+                          <span className="text-[10px] text-muted-foreground">{kund.ed}</span>
+                        </div>
+                      )}
+                      {kund.adr && (
+                        <span className="text-[10px] text-muted-foreground truncate">
+                          {kund.adr}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {onAddToCalendar && (
+                    <button
+                      onClick={() => onAddToCalendar(kund, date)}
+                      className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium shrink-0 border border-primary/20 rounded-lg px-2 py-1 hover:bg-primary/5 transition-colors"
+                      title="Lägg till i Google Kalender"
+                    >
+                      <CalendarPlus className="h-3.5 w-3.5" />
+                      Lägg till
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
+          )}
 
           {/* Google Calendar events */}
-          {selectedEvents.map((e) => (
-            <div key={e.id} className="flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-              <p className="text-xs text-foreground">{e.summary}</p>
+          {selectedEvents.length > 0 && (
+            <div className="space-y-1.5">
+              {selectedEvents.map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center gap-2 rounded-lg bg-primary/5 border border-primary/10 px-3 py-2"
+                >
+                  <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                  <p className="text-xs font-medium text-foreground">{e.summary}</p>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+        </div>
+      )}
+
+      {/* Prompt when day is selected but empty */}
+      {selectedDay !== null && selectedClients.length === 0 && selectedEvents.length === 0 && (
+        <div className="mt-3 rounded-xl border border-dashed border-border px-4 py-3 text-center">
+          <p className="text-xs text-muted-foreground">
+            Inga inspelningar den {selectedDay} {MONTH_NAMES[month].toLowerCase()}
+          </p>
         </div>
       )}
     </div>

@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useState, useCallback, useEffect } from "react"
 import {
-  AUTH_KEY,
   getAuthUser,
   setAuthUser,
   clearAuth,
@@ -13,7 +12,7 @@ import {
 
 interface AuthContextValue {
   user: AuthUser | null
-  login: (name: string, password: string) => boolean
+  login: (name: string, password: string) => Promise<boolean>
   logout: () => void
 }
 
@@ -34,8 +33,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoaded(true)
   }, [])
 
-  const login = useCallback((name: string, password: string): boolean => {
-    if (!isValidLogin(name, password)) return false
+  const login = useCallback(async (name: string, password: string): Promise<boolean> => {
+    const valid = await isValidLogin(name, password)
+    if (!valid) return false
     const authUser: AuthUser = {
       name: normalizeUserName(name),
       loggedInAt: Date.now(),

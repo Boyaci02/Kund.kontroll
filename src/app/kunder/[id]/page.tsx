@@ -1,12 +1,14 @@
 "use client"
 
 import { useParams, useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useDB } from "@/lib/store"
 import { useAuth } from "@/components/providers/AuthProvider"
 import { OB_STEG } from "@/lib/data"
 import { TEAM_FARGER } from "@/lib/types"
+import type { AirtableRecord, AirtableStatus } from "@/lib/types"
 import { paketClass, statusClass } from "@/lib/helpers"
+import { AIRTABLE_TABLE_MAP } from "@/lib/airtable-config"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -31,11 +33,11 @@ import {
   Video,
   Scissors,
   UserCheck,
-  Phone,
-  MapPin,
   Calendar,
   MessageSquare,
   RotateCcw,
+  Loader2,
+  ExternalLink,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -95,6 +97,55 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
+const SWEDISH_MONTHS: Record<string, number> = {
+  januari: 1, februari: 2, mars: 3, april: 4, maj: 5, juni: 6,
+  juli: 7, augusti: 8, september: 9, oktober: 10, november: 11, december: 12,
+}
+
+function parseMonthFromCategory(cat: string): number | null {
+  const lower = cat.toLowerCase()
+  for (const [name, num] of Object.entries(SWEDISH_MONTHS)) {
+    if (lower.includes(name)) return num
+  }
+  return null
+}
+
+function buildContentColumns(
+  recs: AirtableRecord[],
+  fieldName: string
+): Array<{ key: string; label: string; isCurrent: boolean }> {
+  const now = new Date()
+  const currentMonth = now.getMonth() + 1
+  const seen = new Set<string>()
+  recs.forEach((r) => {
+    const cat = ((r.fields[fieldName] ?? "") as string).trim()
+    if (cat) seen.add(cat)
+  })
+  return [...seen]
+    .map((cat) => {
+      const monthNum = parseMonthFromCategory(cat)
+      return { key: cat, label: cat, monthNum, isCurrent: monthNum === currentMonth }
+    })
+    .sort((a, b) => {
+      if (a.monthNum !== null && b.monthNum !== null) return a.monthNum - b.monthNum
+      if (a.monthNum !== null) return -1
+      if (b.monthNum !== null) return 1
+      return a.label.localeCompare(b.label, "sv")
+    })
+}
+
+function contentStatusClass(s: AirtableStatus) {
+  if (s === "In progress") return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+  if (s === "Done") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+  return "bg-muted text-muted-foreground"
+}
+
+function contentStatusLabel(s: AirtableStatus) {
+  if (s === "In progress") return "Pågår"
+  if (s === "Done") return "Klar"
+  return "Att göra"
+}
+
 export default function KundkortPage() {
   const params = useParams()
   const router = useRouter()
@@ -105,6 +156,20 @@ export default function KundkortPage() {
   const [notes, setNotes] = useState(kund?.notes ?? "")
   const [notesDirty, setNotesDirty] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [contentRecords, setContentRecords] = useState<AirtableRecord[]>([])
+  const [contentLoading, setContentLoading] = useState(false)
+
+  const airtableConfig = kund ? AIRTABLE_TABLE_MAP[kund.name] : undefined
+
+  useEffect(() => {
+    if (!airtableConfig) return
+    setContentLoading(true)
+    fetch(`/api/airtable?tableId=${airtableConfig.tableId}`)
+      .then((r) => r.json())
+      .then((data) => setContentRecords(data.records ?? []))
+      .catch(() => {})
+      .finally(() => setContentLoading(false))
+  }, [airtableConfig?.tableId])
   const [form, setForm] = useState<Omit<Kund, "id">>(
     kund
       ? { ...kund }
@@ -404,6 +469,127 @@ export default function KundkortPage() {
           className="resize-none text-sm"
         />
       </div>
+
+      {/* Content preview */}
+      {airtableConfig && (
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Content
+            </h2>
+            <div className="flex items-center gap-2">
+              {contentLoading && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => router.push("/content")}
+              >
+                Öppna Content
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+
+          {contentLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : contentRecords.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">Inga content-poster hittades</p>
+          ) : (
+            <div className="overflow-x-auto -mx-1 px-1">
+              <div className="flex gap-3 pb-2" style={{ minWidth: "max-content" }}>
+                {buildContentColumns(contentRecords, airtableConfig.monthFieldName).map((col) => {
+                  const colRecords = contentRecords.filter(
+                    (r) =>
+                      ((r.fields[airtableConfig.monthFieldName] ?? "") as string).trim() === col.key
+                  )
+                  return (
+                    <div key={col.key} className="w-48 shrink-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <span
+                          className={cn(
+                            "text-xs font-medium",
+                            col.isCurrent ? "text-primary" : "text-muted-foreground"
+                          )}
+                        >
+                          {col.label}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{colRecords.length}</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {colRecords.map((r) => {
+                          const name = (r.fields["Name"] ?? "–") as string
+                          const status = (r.fields["Status"] ?? "Todo") as AirtableStatus
+                          return (
+                            <div
+                              key={r.id}
+                              className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background px-2.5 py-2"
+                            >
+                              <span className="text-xs text-foreground truncate flex-1">{name}</span>
+                              <span
+                                className={cn(
+                                  "text-[10px] rounded-full px-1.5 py-0.5 shrink-0 font-medium whitespace-nowrap",
+                                  contentStatusClass(status)
+                                )}
+                              >
+                                {contentStatusLabel(status)}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+                {/* Uncategorized */}
+                {(() => {
+                  const uncat = contentRecords.filter(
+                    (r) =>
+                      !((r.fields[airtableConfig.monthFieldName] ?? "") as string).trim()
+                  )
+                  if (!uncat.length) return null
+                  return (
+                    <div className="w-48 shrink-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Ej kategoriserat
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{uncat.length}</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {uncat.map((r) => {
+                          const name = (r.fields["Name"] ?? "–") as string
+                          const status = (r.fields["Status"] ?? "Todo") as AirtableStatus
+                          return (
+                            <div
+                              key={r.id}
+                              className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background px-2.5 py-2"
+                            >
+                              <span className="text-xs text-foreground truncate flex-1">{name}</span>
+                              <span
+                                className={cn(
+                                  "text-[10px] rounded-full px-1.5 py-0.5 shrink-0 font-medium whitespace-nowrap",
+                                  contentStatusClass(status)
+                                )}
+                              >
+                                {contentStatusLabel(status)}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Edit Modal */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

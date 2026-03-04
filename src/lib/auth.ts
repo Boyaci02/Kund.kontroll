@@ -37,12 +37,22 @@ export function clearAuth(): void {
   localStorage.removeItem(AUTH_KEY)
 }
 
-export function isValidLogin(name: string, password: string): boolean {
+export async function isValidLogin(name: string, password: string): Promise<boolean> {
   const trimmed = name.trim()
-  const matched = VALID_USERS.find(
+  const normalized = VALID_USERS.find(
     (u) => u.toLowerCase() === trimmed.toLowerCase()
   )
-  return !!matched && password === SHARED_PASSWORD
+  if (!normalized) return false
+
+  const { supabase } = await import("@/lib/supabase")
+  const { data, error } = await supabase
+    .from("team_members")
+    .select("name")
+    .eq("name", normalized)
+    .eq("password", password)
+    .single()
+
+  return !error && !!data
 }
 
 export function normalizeUserName(name: string): string {

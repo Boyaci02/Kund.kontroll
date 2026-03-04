@@ -35,13 +35,13 @@ export default function LoginPage() {
     if (user) router.replace("/")
   }, [user, router])
 
-  function handleSignIn(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
     const name = (formData.get("email") as string) ?? ""
     const password = (formData.get("password") as string) ?? ""
 
-    const success = login(name, password)
+    const success = await login(name, password)
     if (success) {
       router.push("/")
     } else {
