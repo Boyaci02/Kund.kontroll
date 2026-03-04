@@ -1,0 +1,50 @@
+"use client"
+
+import { createContext, useContext } from "react"
+import type { DB, Kund, OnboardingTillstand } from "./types"
+import { INIT_KUNDER } from "./data"
+
+export const DB_KEY = "kkv4"
+
+export function getInitialDB(): DB {
+  return {
+    clients: INIT_KUNDER,
+    obState: {},
+    nextId: 38,
+  }
+}
+
+export function loadDB(): DB {
+  if (typeof window === "undefined") return getInitialDB()
+  try {
+    const raw = localStorage.getItem(DB_KEY)
+    if (raw) return JSON.parse(raw) as DB
+  } catch {}
+  return getInitialDB()
+}
+
+export function saveDB(db: DB): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(DB_KEY, JSON.stringify(db))
+  } catch {}
+}
+
+export interface DBContextValue {
+  db: DB
+  addKund: (kund: Omit<Kund, "id">) => void
+  updateKund: (kund: Kund) => void
+  deleteKund: (id: number) => void
+  toggleTask: (kundId: number, taskId: string) => void
+  resetObState: (kundId: number) => void
+  exportData: () => void
+  importData: (json: string) => void
+}
+
+export const DBContext = createContext<DBContextValue | null>(null)
+
+export function useDB(): DBContextValue {
+  const ctx = useContext(DBContext)
+  if (!ctx) throw new Error("useDB must be used within DBProvider")
+  return ctx
+}
