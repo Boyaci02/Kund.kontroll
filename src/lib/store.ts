@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext } from "react"
-import type { DB, Kund, OnboardingTillstand } from "./types"
+import type { DB, Kund, OnboardingTillstand, Veckoschema } from "./types"
 import { INIT_KUNDER } from "./data"
 
 export const DB_KEY = "kkv4"
@@ -10,6 +10,8 @@ export function getInitialDB(): DB {
   return {
     clients: INIT_KUNDER,
     obState: {},
+    contactLog: {},
+    schedule: null,
     nextId: 38,
   }
 }
@@ -37,6 +39,8 @@ export interface DBContextValue {
   deleteKund: (id: number) => void
   toggleTask: (kundId: number, taskId: string) => void
   resetObState: (kundId: number) => void
+  toggleContact: (key: string) => void
+  moveToVecka: (kundName: string, from: keyof Veckoschema | null, to: keyof Veckoschema) => void
   exportData: () => void
   importData: (json: string) => void
 }

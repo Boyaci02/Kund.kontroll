@@ -8,7 +8,6 @@ import type { Kund, Paket, Status } from "@/lib/types"
 import { TEAM_FARGER, TEAM_MEDLEMMAR, PAKET_LISTA } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -24,11 +23,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, Pencil, Trash2, ExternalLink } from "lucide-react"
+import { Plus, Search, Pencil, Trash2, ArrowUpDown } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 type Filter = "all" | "AKTIV" | "INAKTIV"
+type SortBy = "name" | "pkg" | "nr" | "vg"
+
+const NONE = "__none__"
+const PKG_ORDER = ["Extra Stort Paket", "Stora Paketet", "Mellan Paketet", "Lilla Paketet", "Special Paket", ""]
 
 const EMPTY_KUND: Omit<Kund, "id"> = {
   name: "",
@@ -42,6 +45,7 @@ const EMPTY_KUND: Omit<Kund, "id"> = {
   ns: "",
   cnt: "",
   ph: "",
+  em: "",
   adr: "",
   notes: "",
 }
@@ -85,6 +89,7 @@ export default function KunderPage() {
   const { db, addKund, updateKund, deleteKund } = useDB()
   const router = useRouter()
   const [filter, setFilter] = useState<Filter>("all")
+  const [sortBy, setSortBy] = useState<SortBy>("name")
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -103,8 +108,14 @@ export default function KunderPage() {
           (c.adr || "").toLowerCase().includes(s)
       )
     }
-    return list
-  }, [db.clients, filter, search])
+    return [...list].sort((a, b) => {
+      if (sortBy === "name") return a.name.localeCompare(b.name, "sv")
+      if (sortBy === "pkg") return PKG_ORDER.indexOf(a.pkg) - PKG_ORDER.indexOf(b.pkg)
+      if (sortBy === "nr") return (a.nr || "ö").localeCompare(b.nr || "ö", "sv")
+      if (sortBy === "vg") return (a.vg || "ö").localeCompare(b.vg || "ö", "sv")
+      return 0
+    })
+  }, [db.clients, filter, search, sortBy])
 
   function openAdd() {
     setEditingId(null)
@@ -179,7 +190,21 @@ export default function KunderPage() {
             </Button>
           ))}
         </div>
-        <span className="text-xs text-muted-foreground ml-auto">{filtered.length} kunder</span>
+        <div className="flex items-center gap-1 ml-auto">
+          <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
+            <SelectTrigger className="h-9 w-44 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Namn</SelectItem>
+              <SelectItem value="pkg">Paket</SelectItem>
+              <SelectItem value="nr">Nästa inspelning</SelectItem>
+              <SelectItem value="vg">Videograf</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground ml-2">{filtered.length} kunder</span>
+        </div>
       </div>
 
       {/* Table */}
@@ -231,6 +256,7 @@ export default function KunderPage() {
                   <td className="px-4 py-3">
                     <div className="text-xs font-medium">{c.cnt || "-"}</div>
                     <div className="text-xs text-muted-foreground">{c.ph || ""}</div>
+                    {c.em && <div className="text-xs text-muted-foreground">{c.em}</div>}
                   </td>
                   <td className="px-4 py-3">
                     {c.st ? (
@@ -286,12 +312,12 @@ export default function KunderPage() {
               </FormField>
             </div>
             <FormField label="Paket">
-              <Select value={form.pkg} onValueChange={(v) => setForm({ ...form, pkg: v as Paket })}>
+              <Select value={form.pkg || NONE} onValueChange={(v) => setForm({ ...form, pkg: (v === NONE ? "" : v) as Paket })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Välj paket" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Inget paket</SelectItem>
+                  <SelectItem value={NONE}>Inget paket</SelectItem>
                   {PAKET_LISTA.map((p) => (
                     <SelectItem key={p} value={p}>{p}</SelectItem>
                   ))}
@@ -310,10 +336,10 @@ export default function KunderPage() {
               </Select>
             </FormField>
             <FormField label="Videograf">
-              <Select value={form.vg} onValueChange={(v) => setForm({ ...form, vg: v })}>
+              <Select value={form.vg || NONE} onValueChange={(v) => setForm({ ...form, vg: v === NONE ? "" : v })}>
                 <SelectTrigger><SelectValue placeholder="Välj" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">-</SelectItem>
+                  <SelectItem value={NONE}>-</SelectItem>
                   {TEAM_MEDLEMMAR.filter(m => m !== "Ingen").map((m) => (
                     <SelectItem key={m} value={m}>{m}</SelectItem>
                   ))}
@@ -321,10 +347,10 @@ export default function KunderPage() {
               </Select>
             </FormField>
             <FormField label="Redigerare">
-              <Select value={form.ed} onValueChange={(v) => setForm({ ...form, ed: v })}>
+              <Select value={form.ed || NONE} onValueChange={(v) => setForm({ ...form, ed: v === NONE ? "" : v })}>
                 <SelectTrigger><SelectValue placeholder="Välj" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">-</SelectItem>
+                  <SelectItem value={NONE}>-</SelectItem>
                   {TEAM_MEDLEMMAR.filter(m => m !== "Ingen").map((m) => (
                     <SelectItem key={m} value={m}>{m}</SelectItem>
                   ))}
@@ -353,8 +379,11 @@ export default function KunderPage() {
             <FormField label="Kontaktperson">
               <Input value={form.cnt} onChange={(e) => setForm({ ...form, cnt: e.target.value })} placeholder="Namn" />
             </FormField>
-            <FormField label="Telefon / E-post">
+            <FormField label="Telefon">
               <Input value={form.ph} onChange={(e) => setForm({ ...form, ph: e.target.value })} placeholder="073-XXX XX XX" />
+            </FormField>
+            <FormField label="E-post">
+              <Input value={form.em} onChange={(e) => setForm({ ...form, em: e.target.value })} placeholder="namn@foretag.se" type="email" />
             </FormField>
             <div className="col-span-2">
               <FormField label="Adress">

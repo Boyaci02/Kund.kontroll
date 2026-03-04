@@ -259,24 +259,32 @@ export default function TasksPage() {
       {/* Tab: Inspelning */}
       {tab === "inspelning" && (
         <div className="space-y-6">
-          <RecordingSection
-            title="Videograf"
-            icon={<Video className="h-4 w-4 text-primary" />}
-            clients={videoClients}
-            roleLabel="Videograf"
-          />
-          <RecordingSection
-            title="Redigerare"
-            icon={<Pencil className="h-4 w-4 text-amber-500" />}
-            clients={editClients}
-            roleLabel="Redigerare"
-          />
-          <RecordingSection
-            title="Content Creator"
-            icon={<UserCheck className="h-4 w-4 text-emerald-500" />}
-            clients={ccClients}
-            roleLabel="Content Creator"
-          />
+          {videoClients.length === 0 && editClients.length === 0 && ccClients.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              Inga inspelningsuppgifter tilldelade för vald person
+            </p>
+          ) : (
+            <>
+              <RecordingSection
+                title="Videograf"
+                icon={<Video className="h-4 w-4 text-primary" />}
+                clients={videoClients}
+                roleLabel="Videograf"
+              />
+              <RecordingSection
+                title="Redigerare"
+                icon={<Pencil className="h-4 w-4 text-amber-500" />}
+                clients={editClients}
+                roleLabel="Redigerare"
+              />
+              <RecordingSection
+                title="Content Creator"
+                icon={<UserCheck className="h-4 w-4 text-emerald-500" />}
+                clients={ccClients}
+                roleLabel="Content Creator"
+              />
+            </>
+          )}
         </div>
       )}
     </div>

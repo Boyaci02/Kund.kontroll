@@ -42,6 +42,8 @@ import { toast } from "sonner"
 import type { Kund, Paket, Status } from "@/lib/types"
 import { TEAM_MEDLEMMAR, PAKET_LISTA } from "@/lib/types"
 
+const NONE = "__none__"
+
 function TeamRow({
   label,
   name,
@@ -118,6 +120,7 @@ export default function KundkortPage() {
           ns: "",
           cnt: "",
           ph: "",
+          em: "",
           adr: "",
           notes: "",
         }
@@ -220,7 +223,13 @@ export default function KundkortPage() {
             Kundinfo
           </h2>
           <InfoRow label="Kontaktperson" value={kund.cnt} />
-          <InfoRow label="Telefon / Mail" value={kund.ph} />
+          <InfoRow label="Telefon" value={kund.ph} />
+          {kund.em && (
+            <div className="flex items-center justify-between py-1.5">
+              <span className="text-xs text-muted-foreground">E-post</span>
+              <a href={`mailto:${kund.em}`} className="text-xs text-primary hover:underline">{kund.em}</a>
+            </div>
+          )}
           <InfoRow label="Adress" value={kund.adr} />
         </div>
 
@@ -413,14 +422,14 @@ export default function KundkortPage() {
             </div>
             <FormField label="Paket">
               <Select
-                value={form.pkg}
-                onValueChange={(v) => setForm({ ...form, pkg: v as Paket })}
+                value={form.pkg || NONE}
+                onValueChange={(v) => setForm({ ...form, pkg: (v === NONE ? "" : v) as Paket })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Välj paket" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Inget paket</SelectItem>
+                  <SelectItem value={NONE}>Inget paket</SelectItem>
                   {PAKET_LISTA.map((p) => (
                     <SelectItem key={p} value={p}>
                       {p}
@@ -444,12 +453,12 @@ export default function KundkortPage() {
               </Select>
             </FormField>
             <FormField label="Videograf">
-              <Select value={form.vg} onValueChange={(v) => setForm({ ...form, vg: v })}>
+              <Select value={form.vg || NONE} onValueChange={(v) => setForm({ ...form, vg: v === NONE ? "" : v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Välj" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">-</SelectItem>
+                  <SelectItem value={NONE}>-</SelectItem>
                   {TEAM_MEDLEMMAR.filter((m) => m !== "Ingen").map((m) => (
                     <SelectItem key={m} value={m}>
                       {m}
@@ -459,12 +468,12 @@ export default function KundkortPage() {
               </Select>
             </FormField>
             <FormField label="Redigerare">
-              <Select value={form.ed} onValueChange={(v) => setForm({ ...form, ed: v })}>
+              <Select value={form.ed || NONE} onValueChange={(v) => setForm({ ...form, ed: v === NONE ? "" : v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Välj" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">-</SelectItem>
+                  <SelectItem value={NONE}>-</SelectItem>
                   {TEAM_MEDLEMMAR.filter((m) => m !== "Ingen").map((m) => (
                     <SelectItem key={m} value={m}>
                       {m}
@@ -515,11 +524,19 @@ export default function KundkortPage() {
                 placeholder="Namn"
               />
             </FormField>
-            <FormField label="Telefon / E-post">
+            <FormField label="Telefon">
               <Input
                 value={form.ph}
                 onChange={(e) => setForm({ ...form, ph: e.target.value })}
                 placeholder="073-XXX XX XX"
+              />
+            </FormField>
+            <FormField label="E-post">
+              <Input
+                value={form.em ?? ""}
+                onChange={(e) => setForm({ ...form, em: e.target.value })}
+                placeholder="namn@foretag.se"
+                type="email"
               />
             </FormField>
             <div className="col-span-2">

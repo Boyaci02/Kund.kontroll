@@ -1,8 +1,10 @@
 "use client"
 
+import { useDB } from "@/lib/store"
 import { KONTAKTER } from "@/lib/data"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, MessageSquare, PhoneCall } from "lucide-react"
+import { Calendar, MessageSquare, PhoneCall, CheckCheck } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 const SEKTIONER = [
   {
@@ -32,6 +34,9 @@ const SEKTIONER = [
 ]
 
 export default function KundkontaktPage() {
+  const { db, toggleContact } = useDB()
+  const contactLog = db.contactLog ?? {}
+
   return (
     <div className="p-8 space-y-6">
       <div>
@@ -53,21 +58,34 @@ export default function KundkontaktPage() {
               {KONTAKTER[key].length === 0 ? (
                 <p className="text-sm text-muted-foreground">Inga kontakter</p>
               ) : (
-                KONTAKTER[key].map((k, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-2.5 rounded-xl border border-border/60 px-3 py-2.5 bg-card hover:bg-muted/30 transition-colors"
-                  >
-                    <div className={`h-1.5 w-1.5 rounded-full ${dot} mt-1.5 shrink-0`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{k.name}</p>
-                      <p className="text-xs text-muted-foreground">{k.day}</p>
-                      {k.note && (
-                        <p className="text-xs text-muted-foreground/70 mt-0.5">{k.note}</p>
+                KONTAKTER[key].map((k, i) => {
+                  const logKey = `${key}-${k.name}`
+                  const done = !!contactLog[logKey]
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => toggleContact(logKey)}
+                      className={cn(
+                        "w-full flex items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-colors text-left",
+                        done
+                          ? "border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-900/10"
+                          : "border-border/60 bg-card hover:bg-muted/30"
                       )}
-                    </div>
-                  </div>
-                ))
+                    >
+                      <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", done ? "bg-emerald-500" : dot)} />
+                      <div className="flex-1 min-w-0">
+                        <p className={cn("text-sm font-medium", done ? "line-through text-muted-foreground" : "text-foreground")}>
+                          {k.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{k.day}</p>
+                        {k.note && (
+                          <p className="text-xs text-muted-foreground/70 mt-0.5">{k.note}</p>
+                        )}
+                      </div>
+                      {done && <CheckCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />}
+                    </button>
+                  )
+                })
               )}
             </CardContent>
           </Card>

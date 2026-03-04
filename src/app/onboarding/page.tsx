@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useDB } from "@/lib/store"
+import { useRouter } from "next/navigation"
 import { OB_STEG } from "@/lib/data"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -19,6 +20,7 @@ const TOTAL_TASKS = OB_STEG.reduce((acc, s) => acc + s.tasks.length, 0)
 
 export default function OnboardingPage() {
   const { db, toggleTask, resetObState } = useDB()
+  const router = useRouter()
   const [tab, setTab] = useState<Tab>("pågående")
   const [search, setSearch] = useState("")
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -149,7 +151,12 @@ export default function OnboardingPage() {
                         {tab === "klara" && (
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                         )}
-                        <h3 className="font-semibold text-sm text-foreground truncate">{kund.name}</h3>
+                        <button
+                          className="font-semibold text-sm text-foreground truncate hover:underline hover:text-primary transition-colors text-left"
+                          onClick={() => router.push(`/kunder/${kund.id}`)}
+                        >
+                          {kund.name}
+                        </button>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{kund.pkg || "Inget paket"}</p>
                     </div>

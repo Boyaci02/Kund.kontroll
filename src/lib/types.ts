@@ -33,6 +33,7 @@ export interface Kund {
   adr: string
   cnt: string // Kontaktperson
   ph: string
+  em: string // E-post
   st: Status
   notes: string
 }
@@ -87,6 +88,8 @@ export interface SMSMall {
 export interface DB {
   clients: Kund[]
   obState: OnboardingTillstand
+  contactLog: Record<string, boolean>
+  schedule: Veckoschema | null
   nextId: number
 }
 
