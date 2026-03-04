@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { useState } from "react"
 import {
   LayoutDashboard,
   Users,
@@ -14,14 +15,18 @@ import {
   ClipboardList,
   LogOut,
   Clapperboard,
+  ChevronDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./ThemeToggle"
 import { useDB } from "@/lib/store"
 import { useAuth } from "@/components/providers/AuthProvider"
 import { TEAM_FARGER } from "@/lib/types"
+import type { LucideIcon } from "lucide-react"
 
-const NAV_ITEMS = [
+type NavItem = { href: string; label: string; icon: LucideIcon } | { separator: true }
+
+const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Översikt", icon: LayoutDashboard },
   { href: "/kunder", label: "Kunder", icon: Users },
   { href: "/onboarding", label: "Onboarding", icon: CheckSquare },
@@ -29,6 +34,7 @@ const NAV_ITEMS = [
   { href: "/veckoplanering", label: "Veckoplanering", icon: Calendar },
   { href: "/kundkontakt", label: "Kundkontakt", icon: PhoneCall },
   { href: "/sms-mallar", label: "SMS-mallar", icon: MessageSquare },
+  { separator: true },
   { href: "/content", label: "Content Creation", icon: Clapperboard },
 ]
 
@@ -48,6 +54,7 @@ export function Sidebar() {
   const router = useRouter()
   const { exportData, importData } = useDB()
   const { user, logout } = useAuth()
+  const [teamOpen, setTeamOpen] = useState(true)
 
   function handleImport() {
     const input = document.createElement("input")
@@ -86,7 +93,11 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map((item, i) => {
+          if ("separator" in item) {
+            return <div key={`sep-${i}`} className="my-2 mx-1 border-t border-border" />
+          }
+          const { href, label, icon: Icon } = item
           const isActive = pathname === href
           return (
             <Link
@@ -108,23 +119,36 @@ export function Sidebar() {
 
       {/* Team */}
       <div className="px-3 py-3 border-t border-border">
-        <p className="px-2 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Team</p>
-        <div className="space-y-0.5">
-          {TEAM.map((name) => (
-            <div
-              key={name}
-              className="flex items-center gap-2.5 rounded-lg px-2 py-1.5"
-            >
+        <button
+          onClick={() => setTeamOpen((v) => !v)}
+          className="flex items-center justify-between w-full px-2 mb-2"
+        >
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Team</p>
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+              !teamOpen && "-rotate-90"
+            )}
+          />
+        </button>
+        {teamOpen && (
+          <div className="space-y-0.5">
+            {TEAM.map((name) => (
               <div
-                className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0"
-                style={{ background: TEAM_FARGER[name] ?? "#9CA3AF" }}
+                key={name}
+                className="flex items-center gap-2.5 rounded-lg px-2 py-1.5"
               >
-                {name[0]}
+                <div
+                  className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0"
+                  style={{ background: TEAM_FARGER[name] ?? "#9CA3AF" }}
+                >
+                  {name[0]}
+                </div>
+                <span className="text-xs text-sidebar-foreground">{name}</span>
               </div>
-              <span className="text-xs text-sidebar-foreground">{name}</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Logged in user */}
