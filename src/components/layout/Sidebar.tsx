@@ -16,6 +16,7 @@ import {
   LogOut,
   Clapperboard,
   ChevronDown,
+  TrendingUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./ThemeToggle"
@@ -23,6 +24,8 @@ import { useDB } from "@/lib/store"
 import { useAuth } from "@/components/providers/AuthProvider"
 import { TEAM_FARGER } from "@/lib/types"
 import type { LucideIcon } from "lucide-react"
+
+const EKONOMI_USERS = ["Emanuel", "Philip", "Jakob"]
 
 type NavItem = { href: string; label: string; icon: LucideIcon } | { separator: true }
 
@@ -115,6 +118,23 @@ export function Sidebar() {
             </Link>
           )
         })}
+        {user && EKONOMI_USERS.includes(user.name) && (
+          <>
+            <div className="my-2 mx-1 border-t border-border" />
+            <Link
+              href="/ekonomi"
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                pathname === "/ekonomi"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+            >
+              <TrendingUp className="h-4 w-4 shrink-0" />
+              Ekonomi
+            </Link>
+          </>
+        )}
       </nav>
 
       {/* Team */}
