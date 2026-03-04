@@ -44,15 +44,27 @@ export async function isValidLogin(name: string, password: string): Promise<bool
   )
   if (!normalized) return false
 
-  const { supabase } = await import("@/lib/supabase")
-  const { data, error } = await supabase
-    .from("team_members")
-    .select("name")
-    .eq("name", normalized)
-    .eq("password", password)
-    .single()
+  // Local check first — always required
+  if (password !== SHARED_PASSWORD) return false
 
-  return !error && !!data
+  // Try Supabase if available; fall back to local check if table doesn't exist yet
+  try {
+    const { supabase } = await import("@/lib/supabase")
+    const { data, error } = await supabase
+      .from("team_members")
+      .select("name")
+      .eq("name", normalized)
+      .eq("password", password)
+      .single()
+
+    // If Supabase query succeeds, use its result
+    if (!error) return !!data
+  } catch {
+    // Supabase unavailable — fall through to local
+  }
+
+  // Fallback: local password is correct and user exists in VALID_USERS
+  return true
 }
 
 export function normalizeUserName(name: string): string {
