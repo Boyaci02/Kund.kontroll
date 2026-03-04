@@ -144,10 +144,10 @@ export default function ContentPage() {
 
   // ── Group records by month ─────────────────────────────────────────────────
   const config = AIRTABLE_TABLE_MAP[selectedClient]
-  const monthFieldId = config?.monthFieldId ?? ""
+  const monthFieldName = config?.monthFieldName ?? ""
 
   function getCategoryForRecord(r: AirtableRecord): string {
-    return (r.fields[monthFieldId] ?? r.fields["Month"] ?? "") as string
+    return (r.fields[monthFieldName] ?? r.fields["Month"] ?? "") as string
   }
 
   function getRecordsForMonth(monthNum: number): AirtableRecord[] {
@@ -211,7 +211,7 @@ export default function ContentPage() {
           Status: form.status || "Todo",
         }
         if (form.notes) fields["Notes"] = form.notes
-        if (dialogCategory) fields[cfg.monthFieldId] = dialogCategory
+        if (dialogCategory) fields[cfg.monthFieldName] = dialogCategory
         await fetch("/api/airtable", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
