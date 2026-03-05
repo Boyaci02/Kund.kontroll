@@ -80,17 +80,17 @@ export function useSyncedState<T>(
 
   const set = useCallback(
     (updater: T | ((prev: T) => T)) => {
-      setState((prev) => {
-        const next = typeof updater === "function"
-          ? (updater as (p: T) => T)(prev)
-          : updater
-        stateRef.current = next
-        try { localStorage.setItem(localKey, JSON.stringify(next)) } catch {}
-        supabase
-          .from("app_state")
-          .upsert({ id: supabaseId, data: next, updated_at: new Date().toISOString() })
-        return next
-      })
+      const next = typeof updater === "function"
+        ? (updater as (p: T) => T)(stateRef.current)
+        : updater
+      stateRef.current = next
+      try { localStorage.setItem(localKey, JSON.stringify(next)) } catch {}
+      setState(next)
+      // .then() is required to trigger the actual HTTP request in Supabase JS v2
+      supabase
+        .from("app_state")
+        .upsert({ id: supabaseId, data: next, updated_at: new Date().toISOString() })
+        .then()
     },
     [supabaseId, localKey]
   )
