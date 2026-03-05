@@ -33,7 +33,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <div className="flex-1 ml-60 flex flex-col min-h-screen">
+      <div className="flex-1 ml-60 min-w-0 overflow-x-hidden flex flex-col min-h-screen">
         <Topbar />
         <main className="flex-1 bg-background">
           {children}

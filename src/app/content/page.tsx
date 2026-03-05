@@ -400,7 +400,7 @@ function ContentBoard() {
       </div>
 
       {/* Kanban board */}
-      <div className="flex-1 overflow-auto px-6 py-5">
+      <div className="flex-1 min-h-0 overflow-auto px-6 py-5">
         {selectedId === null ? (
           <p className="text-sm text-muted-foreground">Inga aktiva kunder.</p>
         ) : (
