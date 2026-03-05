@@ -34,10 +34,6 @@ export default function EditorPipelineClientPage() {
     saveEpState(updated)
   }
 
-  function handleAddRow() {
-    handleChange([...rows, newRow()])
-  }
-
   if (!kund) {
     return (
       <main className="min-h-screen bg-background p-6">
@@ -47,35 +43,37 @@ export default function EditorPipelineClientPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background flex flex-col">
+    <main className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b border-border bg-card px-6 py-4 flex items-center gap-4 shrink-0">
+      <div className="bg-card border-b border-border px-8 py-6">
         <button
           onClick={() => router.push("/editor-pipeline")}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Tillbaka
         </button>
-        <div className="h-4 w-px bg-border" />
-        <div>
-          <h1 className="font-semibold text-foreground">{kund.name}</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {rows.length} video{rows.length !== 1 ? "r" : ""}
-            {kund.ed ? ` · Redigerare: ${kund.ed}` : ""}
-          </p>
+        <div className="flex items-end justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">{kund.name}</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {rows.length} video{rows.length !== 1 ? "r" : ""}
+              {kund.ed ? ` · Redigerare: ${kund.ed}` : ""}
+            </p>
+          </div>
+          <button
+            onClick={() => handleChange([...rows, newRow()])}
+            className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground rounded-xl px-3 py-1.5 hover:opacity-90 transition-opacity font-medium"
+          >
+            <Plus className="w-3.5 h-3.5" /> Lägg till video
+          </button>
         </div>
-        <div className="flex-1" />
-        <button
-          onClick={handleAddRow}
-          className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground rounded-xl px-3 py-1.5 hover:opacity-90 transition-opacity font-medium"
-        >
-          <Plus className="w-3.5 h-3.5" /> Lägg till video
-        </button>
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto">
-        <EditorPipelineTable rows={rows} onChange={handleChange} />
+      {/* Table — inramad i ett kort med luft runt om */}
+      <div className="p-6">
+        <div className="bg-card rounded-2xl border border-border overflow-hidden">
+          <EditorPipelineTable rows={rows} onChange={handleChange} />
+        </div>
       </div>
     </main>
   )
