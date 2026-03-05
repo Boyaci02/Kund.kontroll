@@ -1,5 +1,16 @@
 export type CFStatus = "scheduled" | "inprogress" | "review" | "delivered"
 
+/** En videoidé-rad i kundens arbetsyta */
+export interface ContentRow {
+  id: number
+  title: string
+  format: string    // "Reel" | "Story" | "TikTok" | "Shorts" | "YouTube" | "Övrigt" | ""
+  pubDate: string   // ISO-datum eller ""
+  hook: string
+  notes: string     // script / anteckningar
+  comments: string  // kommentarer
+}
+
 export interface CFCard {
   id: number
   title: string
@@ -19,6 +30,7 @@ export interface CFClientState {
   qn: string         // QC-noteringar
   rev: number        // revisionsantal
   contentBoard: { columns: CFColumn[] }
+  contentTable: ContentRow[]  // arbetsyta med videoidéer
   assignee: number | null  // CF-teammedlem (för QC-granskning)
 }
 
@@ -39,6 +51,7 @@ export interface CFClient {
   qn: string
   rev: number
   contentBoard: { columns: CFColumn[] }
+  contentTable: ContentRow[]
   assignee: number | null
 }
 

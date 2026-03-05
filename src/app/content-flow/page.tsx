@@ -14,6 +14,7 @@ import ClientBoard from "@/components/contentflow/ClientBoard"
 import CFStateModal from "@/components/contentflow/ClientModal"
 import QcModal from "@/components/contentflow/QcModal"
 import ContentBoardModal from "@/components/contentflow/ContentBoardModal"
+import ContentWorkspaceModal from "@/components/contentflow/ContentWorkspaceModal"
 import TeamModal from "@/components/contentflow/TeamModal"
 import { Table, LayoutGrid, Users, Download, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -83,9 +84,10 @@ export default function ContentFlowPage() {
   const [filterAssignee, setFilterAssignee] = useState<number | null>(null)
 
   // Modal states
-  const [stateModalId,  setStateModalId]  = useState<number | null>(null)
-  const [qcClient,      setQcClient]      = useState<CFClient | null>(null)
-  const [boardClient,   setBoardClient]   = useState<CFClient | null>(null)
+  const [stateModalId,  setStateModalId]   = useState<number | null>(null)
+  const [qcClient,      setQcClient]       = useState<CFClient | null>(null)
+  const [boardClient,   setBoardClient]    = useState<CFClient | null>(null)
+  const [workspaceClient, setWorkspaceClient] = useState<CFClient | null>(null)
   const [showTeam,      setShowTeam]      = useState(false)
   const [advanceCfg,    setAdvanceCfg]    = useState<AdvanceConfig | null>(null)
 
@@ -334,6 +336,7 @@ export default function ContentFlowPage() {
             onReview={id => setQcClient(clients.find(x => x.id === id) ?? null)}
             onEdit={id => setStateModalId(id)}
             onBoard={id => setBoardClient(clients.find(x => x.id === id) ?? null)}
+            onWorkspace={id => setWorkspaceClient(clients.find(x => x.id === id) ?? null)}
           />
         ) : (
           <ClientBoard
@@ -344,6 +347,7 @@ export default function ContentFlowPage() {
             onReview={id => setQcClient(clients.find(x => x.id === id) ?? null)}
             onEdit={id => setStateModalId(id)}
             onBoard={id => setBoardClient(clients.find(x => x.id === id) ?? null)}
+            onWorkspace={id => setWorkspaceClient(clients.find(x => x.id === id) ?? null)}
           />
         )}
       </div>
@@ -379,6 +383,14 @@ export default function ContentFlowPage() {
             setBoardClient(updated)
           }}
           onClose={() => setBoardClient(null)}
+        />
+      )}
+
+      {workspaceClient && (
+        <ContentWorkspaceModal
+          client={workspaceClient}
+          onUpdate={rows => updateCFState(workspaceClient.id, { contentTable: rows })}
+          onClose={() => setWorkspaceClient(null)}
         />
       )}
 

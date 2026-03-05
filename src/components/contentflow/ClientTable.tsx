@@ -2,7 +2,7 @@
 
 import { cfDLeft, cfGetList, contentDeadline, STATUS_LABELS, STATUS_STYLES, QC_ITEMS } from "@/lib/contentflow-data"
 import type { CFClient, CFMember, CFFilter, CFSortCol } from "@/lib/contentflow-types"
-import { ArrowUpDown, ChevronUp, ChevronDown, LayoutGrid, Grid3X3, ExternalLink } from "lucide-react"
+import { ArrowUpDown, ChevronUp, ChevronDown, LayoutGrid, Grid3X3, ExternalLink, Table2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 
@@ -27,6 +27,7 @@ interface Props {
   onReview: (id: number) => void
   onEdit: (id: number) => void
   onBoard: (id: number) => void
+  onWorkspace: (id: number) => void
 }
 
 function SortIcon({ col, sortCol, sortDir }: { col: CFSortCol; sortCol: CFSortCol; sortDir: 1 | -1 }) {
@@ -49,7 +50,7 @@ function MemberChip({ clientAssignee, team }: { clientAssignee: number | null; t
 
 export default function ClientTable({
   clients, team, fil, q, sortCol, sortDir, filterAssignee,
-  onSort, onAdvance, onNewCycle, onReview, onEdit, onBoard,
+  onSort, onAdvance, onNewCycle, onReview, onEdit, onBoard, onWorkspace,
 }: Props) {
   const list = cfGetList(clients, fil, q, sortCol, sortDir, filterAssignee)
 
@@ -176,6 +177,9 @@ export default function ClientTable({
                     {c.s === "inprogress" && <button onClick={() => onAdvance(c.id, "review")}     className="text-xs border border-border rounded-lg px-2.5 py-1 hover:bg-muted transition-colors text-foreground">→ Submit</button>}
                     {c.s === "review"     && <button onClick={() => onReview(c.id)}                className="text-xs bg-violet-100 text-violet-700 border border-violet-200 rounded-lg px-2.5 py-1 hover:bg-violet-200 transition-colors font-medium">◎ Review</button>}
                     {c.s === "delivered"  && <button onClick={() => onNewCycle(c.id)}              className="text-xs bg-teal-100 text-teal-700 border border-teal-200 rounded-lg px-2.5 py-1 hover:bg-teal-200 transition-colors font-medium">↺ Ny cykel</button>}
+                    <button onClick={() => onWorkspace(c.id)} title="Arbetsyta" className="text-xs border border-border rounded-lg px-2 py-1 hover:bg-muted transition-colors">
+                      <Table2 className="w-3 h-3" />
+                    </button>
                     <button onClick={() => onBoard(c.id)} title="Content Board" className="text-xs border border-border rounded-lg px-2 py-1 hover:bg-muted transition-colors">
                       <LayoutGrid className="w-3 h-3" />
                     </button>

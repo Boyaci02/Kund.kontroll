@@ -2,7 +2,7 @@
 
 import { cfDLeft, cfGetList, STATUS_LABELS } from "@/lib/contentflow-data"
 import type { CFClient, CFMember, CFFilter, CFSortCol } from "@/lib/contentflow-types"
-import { LayoutGrid } from "lucide-react"
+import { LayoutGrid, Table2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const WEEK_COLORS: Record<string, string> = {
@@ -33,11 +33,12 @@ interface Props {
   onReview: (id: number) => void
   onEdit: (id: number) => void
   onBoard: (id: number) => void
+  onWorkspace: (id: number) => void
 }
 
 export default function ClientBoard({
   clients, team, fil, q, sortCol, sortDir, filterAssignee,
-  onAdvance, onNewCycle, onReview, onEdit, onBoard,
+  onAdvance, onNewCycle, onReview, onEdit, onBoard, onWorkspace,
 }: Props) {
   const list = cfGetList(clients, fil, q, sortCol, sortDir, filterAssignee)
 
@@ -101,6 +102,9 @@ export default function ClientBoard({
                         )}
                       </div>
                       <div className="flex gap-1">
+                        <button onClick={() => onWorkspace(c.id)} title="Arbetsyta" className="text-xs border border-border rounded px-1.5 py-0.5 hover:bg-muted transition-colors">
+                          <Table2 className="w-3 h-3" />
+                        </button>
                         <button onClick={() => onBoard(c.id)} className="text-xs border border-border rounded px-1.5 py-0.5 hover:bg-muted transition-colors">
                           <LayoutGrid className="w-3 h-3" />
                         </button>

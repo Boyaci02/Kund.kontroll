@@ -124,6 +124,7 @@ export function defaultCFState(): CFClientState {
     qn: "",
     rev: 0,
     contentBoard: { columns: [] as CFColumn[] },
+    contentTable: [],
     assignee: null,
   }
 }
