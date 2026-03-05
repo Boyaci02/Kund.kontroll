@@ -194,10 +194,13 @@ export default function KundkortPage() {
     const t: Task = {
       id: newTaskId(),
       title: "",
+      description: "",
       assignee: "",
       kundId: id,
-      deadline: "",
-      done: false,
+      startDate: "",
+      endDate: "",
+      status: "not_started",
+      priority: "",
       createdAt: new Date().toISOString(),
     }
     const updated = [...taskList, t]
@@ -206,7 +209,9 @@ export default function KundkortPage() {
   }
 
   function toggleKundTask(taskId: number) {
-    const updated = taskList.map(t => t.id === taskId ? { ...t, done: !t.done } : t)
+    const updated = taskList.map(t =>
+      t.id === taskId ? { ...t, status: (t.status === "done" ? "not_started" : "done") as Task["status"] } : t
+    )
     setTaskList(updated)
     saveTasks(updated)
   }
@@ -555,7 +560,9 @@ export default function KundkortPage() {
         ) : (
           <div className="divide-y divide-border/50">
             {kundTaskList.map(t => {
-              const overdue = !t.done && !!t.deadline && new Date(t.deadline) < new Date()
+              const isDone = t.status === "done"
+              const dueDate = t.endDate || ""
+              const overdue = !isDone && !!dueDate && new Date(dueDate + "T23:59:59") < new Date()
               const color = TEAM_FARGER[t.assignee] ?? "#9CA3AF"
               return (
                 <div key={t.id} className="flex items-center gap-3 px-5 py-3">
@@ -563,12 +570,12 @@ export default function KundkortPage() {
                     onClick={() => toggleKundTask(t.id)}
                     className={cn(
                       "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
-                      t.done ? "bg-teal-500 border-teal-500 text-white" : "border-border hover:border-primary"
+                      isDone ? "bg-teal-500 border-teal-500 text-white" : "border-border hover:border-primary"
                     )}
                   >
-                    {t.done && <span className="text-[8px] font-bold">✓</span>}
+                    {isDone && <span className="text-[8px] font-bold">✓</span>}
                   </button>
-                  <span className={cn("flex-1 text-sm text-foreground", t.done && "line-through opacity-50")}>
+                  <span className={cn("flex-1 text-sm text-foreground", isDone && "line-through opacity-50")}>
                     {t.title || <span className="italic text-muted-foreground">Utan titel</span>}
                   </span>
                   {t.assignee && (
@@ -576,9 +583,9 @@ export default function KundkortPage() {
                       {t.assignee[0]}
                     </span>
                   )}
-                  {t.deadline && (
+                  {dueDate && (
                     <span className={cn("text-xs shrink-0", overdue ? "text-red-500 font-semibold" : "text-muted-foreground")}>
-                      {new Date(t.deadline).toLocaleDateString("sv-SE", { day: "numeric", month: "short" })}
+                      {new Date(dueDate + "T00:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "short" })}
                     </span>
                   )}
                 </div>

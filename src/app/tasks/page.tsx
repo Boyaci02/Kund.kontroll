@@ -1,318 +1,914 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useDB } from "@/lib/store"
-import { loadTasks, saveTasks, newTaskId } from "@/lib/task-types"
-import type { Task } from "@/lib/task-types"
+import {
+  loadTasks, saveTasks, newTaskId,
+  STATUS_LABELS, STATUS_COLORS,
+} from "@/lib/task-types"
+import type { Task, TaskStatus, TaskPriority } from "@/lib/task-types"
 import { TEAM_MEDLEMMAR, TEAM_FARGER } from "@/lib/types"
-import { Plus, Pencil, Trash2, X, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import Link from "next/link"
+import {
+  Plus, ChevronDown, ChevronRight, MoreHorizontal, Check,
+  X, Filter, Users, Globe, List, Search,
+} from "lucide-react"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 
-// ── Modal ─────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-interface ModalProps {
-  initial?: Task
-  clients: { id: number; name: string }[]
-  onSave: (t: Task) => void
-  onClose: () => void
+type View = "all_clients" | "by_employee" | "all_tasks"
+type DateFilter = "all" | "this_month" | "this_year" | "custom"
+type SortKey = "endDate" | "startDate" | "status" | "kundId" | "assignee"
+type SortDir = "asc" | "desc"
+
+interface ActiveFilters {
+  employees: string[]
+  clients: number[]
+  statuses: TaskStatus[]
 }
 
-function TaskModal({ initial, clients, onSave, onClose }: ModalProps) {
-  const [title, setTitle]       = useState(initial?.title ?? "")
-  const [assignee, setAssignee] = useState(initial?.assignee ?? "")
-  const [kundId, setKundId]     = useState<number | null>(initial?.kundId ?? null)
-  const [deadline, setDeadline] = useState(initial?.deadline ?? "")
+const STATUS_OPTIONS: TaskStatus[] = ["not_started", "in_progress", "done", "blocked"]
 
-  const inputCls = "w-full border border-border rounded-xl px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-  const labelCls = "block text-xs font-semibold text-muted-foreground mb-1"
+// ── Status dropdown (inline) ──────────────────────────────────────────────────
 
-  function handleSave() {
-    if (!title.trim()) return
-    onSave({
-      id:        initial?.id ?? newTaskId(),
-      title:     title.trim(),
-      assignee,
-      kundId,
-      deadline,
-      done:      initial?.done ?? false,
-      createdAt: initial?.createdAt ?? new Date().toISOString(),
-    })
-  }
+function StatusDropdown({ status, onChange }: {
+  status: TaskStatus
+  onChange: (v: TaskStatus) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [open])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="font-semibold text-foreground">{initial ? "Redigera uppgift" : "Ny uppgift"}</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+    <div ref={ref} className="relative inline-flex">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          "text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap hover:opacity-80 transition-opacity",
+          STATUS_COLORS[status]
+        )}
+      >
+        {STATUS_LABELS[status]}
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[140px]">
+          {STATUS_OPTIONS.map(s => (
+            <button
+              key={s}
+              onClick={() => { onChange(s); setOpen(false) }}
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-muted/60 transition-colors text-left"
+            >
+              <span className={cn(
+                "w-1.5 h-1.5 rounded-full shrink-0",
+                s === "not_started" ? "bg-gray-400" :
+                s === "in_progress" ? "bg-blue-500" :
+                s === "done" ? "bg-teal-500" : "bg-red-500"
+              )} />
+              {STATUS_LABELS[s]}
+              {s === status && <Check className="w-3 h-3 ml-auto text-primary" />}
+            </button>
+          ))}
         </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className={labelCls}>Titel *</label>
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Vad ska göras?"
-              className={inputCls}
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Ansvarig</label>
-            <select value={assignee} onChange={e => setAssignee(e.target.value)} className={inputCls}>
-              <option value="">— Ingen tilldelad —</option>
-              {TEAM_MEDLEMMAR.filter(m => m !== "Ingen").map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>Kund (valfritt)</label>
-            <select value={kundId ?? ""} onChange={e => setKundId(e.target.value ? Number(e.target.value) : null)} className={inputCls}>
-              <option value="">— Ingen kund —</option>
-              {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>Deadline</label>
-            <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} className={inputCls} />
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 px-5 pb-5">
-          <button onClick={onClose} className="text-sm border border-border rounded-xl px-4 py-2 hover:bg-muted transition-colors">
-            Avbryt
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!title.trim()}
-            className="text-sm bg-primary text-primary-foreground rounded-xl px-4 py-2 hover:opacity-90 transition-opacity font-medium disabled:opacity-40"
-          >
-            Spara
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Actions menu ──────────────────────────────────────────────────────────────
 
-function fmtDate(d: string) {
-  if (!d) return "—"
-  try { return new Date(d).toLocaleDateString("sv-SE", { day: "numeric", month: "short" }) }
-  catch { return d }
+function ActionsMenu({ onEdit, onDuplicate, onDelete }: {
+  onEdit: () => void
+  onDuplicate: () => void
+  onDelete: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors opacity-0 group-hover:opacity-100"
+      >
+        <MoreHorizontal className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div className="absolute z-50 right-0 top-full mt-1 bg-card border border-border rounded-xl shadow-lg py-1 w-36">
+          <button onClick={() => { onEdit(); setOpen(false) }} className="w-full px-3 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors">Redigera</button>
+          <button onClick={() => { onDuplicate(); setOpen(false) }} className="w-full px-3 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors">Duplicera</button>
+          <div className="h-px bg-border my-1" />
+          <button onClick={() => { onDelete(); setOpen(false) }} className="w-full px-3 py-1.5 text-xs text-left text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">Ta bort</button>
+        </div>
+      )}
+    </div>
+  )
 }
 
-function isOverdue(deadline: string, done: boolean) {
-  return !done && !!deadline && new Date(deadline) < new Date()
+// ── Task modal ────────────────────────────────────────────────────────────────
+
+const EMPTY: Omit<Task, "id" | "createdAt"> = {
+  title: "", description: "", assignee: "", kundId: null,
+  startDate: "", endDate: "", status: "not_started", priority: "",
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+function TaskModal({ open, initial, clients, onSave, onClose }: {
+  open: boolean
+  initial: Partial<Task> | null
+  clients: Array<{ id: number; name: string }>
+  onSave: (t: Omit<Task, "id" | "createdAt">) => void
+  onClose: () => void
+}) {
+  const [form, setForm] = useState<Omit<Task, "id" | "createdAt">>(EMPTY)
 
-type Filter = "all" | "undone" | "done"
+  useEffect(() => {
+    if (open) setForm({ ...EMPTY, ...initial })
+  }, [open, initial])
 
-export default function TasksPage() {
-  const { db } = useDB()
-  const [tasks, setTasks]   = useState<Task[]>([])
-  const [modal, setModal]   = useState<"new" | Task | null>(null)
-  const [filter, setFilter] = useState<Filter>("undone")
-  const [assigneeFilter, setAssigneeFilter] = useState("")
-  const [q, setQ] = useState("")
-
-  useEffect(() => { setTasks(loadTasks()) }, [])
-
-  function persist(t: Task[]) { setTasks(t); saveTasks(t) }
-
-  function handleSave(task: Task) {
-    const exists = tasks.find(t => t.id === task.id)
-    persist(exists ? tasks.map(t => t.id === task.id ? task : t) : [...tasks, task])
-    setModal(null)
+  function save() {
+    if (!form.title.trim()) return
+    onSave(form)
+    onClose()
   }
 
-  function toggleDone(id: number) {
-    persist(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t))
-  }
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{initial?.id ? "Redigera task" : "Ny task"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Titel *</label>
+            <Input
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="Uppgiftens namn..."
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Beskrivning</label>
+            <Textarea
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Kort beskrivning..."
+              rows={3}
+              className="resize-none text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Kund</label>
+              <select
+                value={form.kundId ?? ""}
+                onChange={e => setForm(f => ({ ...f, kundId: e.target.value ? Number(e.target.value) : null }))}
+                className="w-full text-sm rounded-lg px-3 py-2 border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="">Ingen kund</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Ansvarig</label>
+              <select
+                value={form.assignee}
+                onChange={e => setForm(f => ({ ...f, assignee: e.target.value }))}
+                className="w-full text-sm rounded-lg px-3 py-2 border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="">Ingen</option>
+                {TEAM_MEDLEMMAR.filter(m => m !== "Ingen").map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Startdatum</label>
+              <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Slutdatum</label>
+              <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</label>
+              <select
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value as TaskStatus }))}
+                className="w-full text-sm rounded-lg px-3 py-2 border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Prioritet</label>
+              <select
+                value={form.priority}
+                onChange={e => setForm(f => ({ ...f, priority: e.target.value as TaskPriority }))}
+                className="w-full text-sm rounded-lg px-3 py-2 border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="">Ingen prioritet</option>
+                <option value="low">Låg</option>
+                <option value="medium">Medium</option>
+                <option value="high">Hög</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Avbryt</Button>
+          <Button onClick={save} disabled={!form.title.trim()}>Spara</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
-  function deleteTask(id: number) {
-    persist(tasks.filter(t => t.id !== id))
-  }
+// ── Table header ──────────────────────────────────────────────────────────────
 
-  const clients = db.clients.map(c => ({ id: c.id, name: c.name }))
-
-  const filtered = tasks
-    .filter(t => filter === "all" ? true : filter === "done" ? t.done : !t.done)
-    .filter(t => assigneeFilter ? t.assignee === assigneeFilter : true)
-    .filter(t => !q || t.title.toLowerCase().includes(q.toLowerCase()))
-    .sort((a, b) => {
-      if (a.done !== b.done) return a.done ? 1 : -1
-      if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline)
-      if (a.deadline) return -1
-      if (b.deadline) return 1
-      return b.createdAt.localeCompare(a.createdAt)
-    })
-
-  const filterBtn = (f: Filter, label: string) => (
-    <button
-      onClick={() => setFilter(f)}
+function TableHead({ sortKey, sortDir, onSort, showAssignee }: {
+  sortKey: SortKey
+  sortDir: SortDir
+  onSort: (k: SortKey) => void
+  showAssignee: boolean
+}) {
+  const th = (label: string, key?: SortKey) => (
+    <th
+      key={label}
+      onClick={key ? () => onSort(key) : undefined}
       className={cn(
-        "text-xs font-medium px-3 py-1.5 rounded-lg transition-colors",
-        filter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        "text-left text-[0.6rem] font-semibold text-muted-foreground uppercase tracking-wide px-4 py-3 whitespace-nowrap",
+        key && "cursor-pointer hover:text-foreground transition-colors select-none"
       )}
     >
       {label}
-    </button>
+      {key && sortKey === key && <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>}
+    </th>
   )
+
+  return (
+    <thead>
+      <tr className="border-b border-border bg-muted/40">
+        {th("Task")}
+        {th("Beskrivning")}
+        {th("Kund", "kundId")}
+        {th("Datum", "startDate")}
+        {th("Status", "status")}
+        {showAssignee && th("Ansvarig", "assignee")}
+        <th className="w-8 px-2" />
+      </tr>
+    </thead>
+  )
+}
+
+// ── Task row ──────────────────────────────────────────────────────────────────
+
+function TaskRow({ task, kundName, showAssignee, onStatusChange, onEdit, onDuplicate, onDelete }: {
+  task: Task
+  kundName: string
+  showAssignee: boolean
+  onStatusChange: (s: TaskStatus) => void
+  onEdit: () => void
+  onDuplicate: () => void
+  onDelete: () => void
+}) {
+  const color = TEAM_FARGER[task.assignee] ?? "#9CA3AF"
+  const isOverdue = task.status !== "done" && !!task.endDate && new Date(task.endDate + "T23:59:59") < new Date()
+
+  function fmt(d: string) {
+    if (!d) return ""
+    return new Date(d + "T00:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "short", year: "numeric" })
+  }
+
+  return (
+    <tr className="group border-b border-border/40 hover:bg-muted/20 transition-colors">
+      <td className="px-4 py-3 min-w-[180px]">
+        <button
+          onClick={onEdit}
+          className="text-sm font-medium text-foreground hover:text-primary text-left transition-colors"
+        >
+          {task.title || <span className="italic text-muted-foreground text-xs">Utan titel</span>}
+        </button>
+      </td>
+      <td className="px-4 py-3 max-w-[200px]">
+        <span className="text-xs text-muted-foreground truncate block">{task.description || "—"}</span>
+      </td>
+      <td className="px-4 py-3 min-w-[120px]">
+        {kundName ? (
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 rounded-md bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary shrink-0">
+              {kundName[0]}
+            </div>
+            <span className="text-xs text-foreground">{kundName}</span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-4 py-3 min-w-[150px]">
+        <span className={cn("text-xs whitespace-nowrap", isOverdue ? "text-red-500 font-semibold" : "text-muted-foreground")}>
+          {task.startDate && task.endDate
+            ? `${fmt(task.startDate)} → ${fmt(task.endDate)}`
+            : task.endDate ? fmt(task.endDate)
+            : task.startDate ? fmt(task.startDate)
+            : "—"}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <StatusDropdown status={task.status} onChange={onStatusChange} />
+      </td>
+      {showAssignee && (
+        <td className="px-4 py-3">
+          {task.assignee ? (
+            <div className="flex items-center gap-1.5">
+              <div
+                className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                style={{ background: color }}
+              >
+                {task.assignee[0]}
+              </div>
+              <span className="text-xs text-muted-foreground">{task.assignee}</span>
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </td>
+      )}
+      <td className="px-2 py-3">
+        <ActionsMenu onEdit={onEdit} onDuplicate={onDuplicate} onDelete={onDelete} />
+      </td>
+    </tr>
+  )
+}
+
+// ── Employee group ────────────────────────────────────────────────────────────
+
+function EmployeeGroup({ name, tasks, clients, onStatusChange, onEdit, onDuplicate, onDelete, onAddTask, sortKey, sortDir, onSort }: {
+  name: string
+  tasks: Task[]
+  clients: Array<{ id: number; name: string }>
+  onStatusChange: (id: number, s: TaskStatus) => void
+  onEdit: (t: Task) => void
+  onDuplicate: (t: Task) => void
+  onDelete: (id: number) => void
+  onAddTask: () => void
+  sortKey: SortKey
+  sortDir: SortDir
+  onSort: (k: SortKey) => void
+}) {
+  const [expanded, setExpanded] = useState(true)
+  const color = TEAM_FARGER[name] ?? "#9CA3AF"
+  const isUnassigned = name === "Ej tilldelad"
+
+  return (
+    <div className="rounded-xl border border-border overflow-hidden mb-3">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="flex items-center gap-3 w-full px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+      >
+        {expanded
+          ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        }
+        {isUnassigned ? (
+          <span className="text-sm font-semibold text-muted-foreground">{name}</span>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div
+              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+              style={{ background: color }}
+            >
+              {name[0]}
+            </div>
+            <span className="text-sm font-semibold text-foreground">{name}</span>
+          </div>
+        )}
+        <span className="ml-1 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+          {tasks.length}
+        </span>
+      </button>
+
+      {expanded && (
+        <>
+          <table className="w-full text-sm border-collapse">
+            <TableHead sortKey={sortKey} sortDir={sortDir} onSort={onSort} showAssignee={false} />
+            <tbody>
+              {tasks.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-xs text-muted-foreground">Inga tasks</td>
+                </tr>
+              ) : tasks.map(t => {
+                const kundName = clients.find(c => c.id === t.kundId)?.name ?? ""
+                return (
+                  <TaskRow
+                    key={t.id}
+                    task={t}
+                    kundName={kundName}
+                    showAssignee={false}
+                    onStatusChange={s => onStatusChange(t.id, s)}
+                    onEdit={() => onEdit(t)}
+                    onDuplicate={() => onDuplicate(t)}
+                    onDelete={() => onDelete(t.id)}
+                  />
+                )
+              })}
+            </tbody>
+          </table>
+          <div className="border-t border-border/40 px-4 py-2 bg-muted/10">
+            <button
+              onClick={onAddTask}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg px-2 py-1.5 transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Ny task
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function TasksPage() {
+  const { db } = useDB()
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [view, setView] = useState<View>("all_tasks")
+  const [search, setSearch] = useState("")
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all")
+  const [customStart, setCustomStart] = useState("")
+  const [customEnd, setCustomEnd] = useState("")
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>({ employees: [], clients: [], statuses: [] })
+  const [showFilterMenu, setShowFilterMenu] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>("endDate")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<Partial<Task> | null>(null)
+  const filterMenuRef = useRef<HTMLDivElement>(null)
+
+  const clients = db.clients.filter(c => c.st === "AKTIV" || c.st === "")
+
+  useEffect(() => { setTasks(loadTasks()) }, [])
+
+  useEffect(() => {
+    if (!showFilterMenu) return
+    const h = (e: MouseEvent) => {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) setShowFilterMenu(false)
+    }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [showFilterMenu])
+
+  function persist(updated: Task[]) {
+    setTasks(updated)
+    saveTasks(updated)
+  }
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc")
+    else { setSortKey(key); setSortDir("asc") }
+  }
+
+  function openNewTask(assignee = "", kundId: number | null = null) {
+    setEditingTask({ assignee, kundId })
+    setModalOpen(true)
+  }
+
+  function openEditTask(t: Task) {
+    setEditingTask({ ...t })
+    setModalOpen(true)
+  }
+
+  function handleSave(form: Omit<Task, "id" | "createdAt">) {
+    if (editingTask?.id) {
+      persist(tasks.map(t => t.id === editingTask.id ? { ...t, ...form } : t))
+    } else {
+      persist([...tasks, { ...form, id: newTaskId(), createdAt: new Date().toISOString() }])
+    }
+  }
+
+  function handleStatusChange(id: number, status: TaskStatus) {
+    persist(tasks.map(t => t.id === id ? { ...t, status } : t))
+  }
+
+  function handleDuplicate(t: Task) {
+    persist([...tasks, { ...t, id: newTaskId(), title: `${t.title} (kopia)`, createdAt: new Date().toISOString() }])
+  }
+
+  function handleDelete(id: number) {
+    persist(tasks.filter(t => t.id !== id))
+  }
+
+  function removeFilter(type: keyof ActiveFilters, value: string | number) {
+    setActiveFilters(f => ({ ...f, [type]: (f[type] as (string | number)[]).filter(v => v !== value) }))
+  }
+
+  // ── Filtering + sorting ───────────────────────────────────────────────────
+
+  const filtered = useMemo(() => {
+    let result = [...tasks]
+
+    if (view === "all_clients") result = result.filter(t => t.kundId !== null)
+
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter(t =>
+        t.title.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        (clients.find(c => c.id === t.kundId)?.name ?? "").toLowerCase().includes(q)
+      )
+    }
+
+    const now = new Date()
+    if (dateFilter === "this_month") {
+      result = result.filter(t => {
+        const d = t.endDate || t.startDate
+        if (!d) return false
+        const dt = new Date(d)
+        return dt.getFullYear() === now.getFullYear() && dt.getMonth() === now.getMonth()
+      })
+    } else if (dateFilter === "this_year") {
+      result = result.filter(t => {
+        const d = t.endDate || t.startDate
+        if (!d) return false
+        return new Date(d).getFullYear() === now.getFullYear()
+      })
+    } else if (dateFilter === "custom" && (customStart || customEnd)) {
+      result = result.filter(t => {
+        const d = t.endDate || t.startDate
+        if (!d) return false
+        const dt = new Date(d)
+        if (customStart && dt < new Date(customStart)) return false
+        if (customEnd && dt > new Date(customEnd + "T23:59:59")) return false
+        return true
+      })
+    }
+
+    if (activeFilters.employees.length > 0)
+      result = result.filter(t => activeFilters.employees.includes(t.assignee))
+    if (activeFilters.clients.length > 0)
+      result = result.filter(t => t.kundId !== null && activeFilters.clients.includes(t.kundId))
+    if (activeFilters.statuses.length > 0)
+      result = result.filter(t => activeFilters.statuses.includes(t.status))
+
+    result.sort((a, b) => {
+      let va = "", vb = ""
+      if (sortKey === "endDate") { va = a.endDate || a.startDate; vb = b.endDate || b.startDate }
+      else if (sortKey === "startDate") { va = a.startDate; vb = b.startDate }
+      else if (sortKey === "status") { va = a.status; vb = b.status }
+      else if (sortKey === "kundId") {
+        va = clients.find(c => c.id === a.kundId)?.name ?? ""
+        vb = clients.find(c => c.id === b.kundId)?.name ?? ""
+      }
+      else if (sortKey === "assignee") { va = a.assignee; vb = b.assignee }
+      const cmp = va.localeCompare(vb, "sv")
+      return sortDir === "asc" ? cmp : -cmp
+    })
+
+    return result
+  }, [tasks, view, search, dateFilter, customStart, customEnd, activeFilters, sortKey, sortDir, clients])
+
+  const hasActiveFilters = activeFilters.employees.length + activeFilters.clients.length + activeFilters.statuses.length > 0
+  const members = TEAM_MEDLEMMAR.filter(m => m !== "Ingen")
+  const unassigned = filtered.filter(t => !t.assignee || !(members as string[]).includes(t.assignee))
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <main className="min-h-screen bg-background p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-foreground">Tasks</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {tasks.filter(t => !t.done).length} ogjorda · {tasks.filter(t => t.done).length} klara
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage team tasks and client work</p>
         </div>
-        <button
-          onClick={() => setModal("new")}
-          className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground rounded-xl px-4 py-2 hover:opacity-90 transition-opacity font-medium"
-        >
-          <Plus className="w-4 h-4" /> Ny uppgift
-        </button>
+        <Button size="sm" onClick={() => openNewTask()} className="gap-1.5">
+          <Plus className="w-3.5 h-3.5" />
+          Ny task
+        </Button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="flex items-center gap-1 bg-muted/50 rounded-xl p-1">
-          {filterBtn("undone", "Ogjorda")}
-          {filterBtn("all", "Alla")}
-          {filterBtn("done", "Klara")}
+      {/* Toolbar */}
+      <div className="mb-5 space-y-3">
+        {/* Row 1: Views + Search */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center bg-muted/50 rounded-xl p-0.5 gap-0.5">
+            {([
+              { key: "all_clients" as View, label: "All Client Tasks", icon: Globe },
+              { key: "by_employee" as View, label: "By Employee", icon: Users },
+              { key: "all_tasks" as View, label: "All Tasks", icon: List },
+            ] as { key: View; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setView(key)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                  view === key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon className="w-3 h-3" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative flex-1 min-w-[180px] max-w-[260px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Sök tasks..."
+              className="w-full text-xs pl-8 pr-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
         </div>
-        <select
-          value={assigneeFilter}
-          onChange={e => setAssigneeFilter(e.target.value)}
-          className="text-xs border border-border rounded-xl px-3 py-1.5 bg-background focus:outline-none"
-        >
-          <option value="">Alla ansvariga</option>
-          {TEAM_MEDLEMMAR.filter(m => m !== "Ingen").map(m => (
-            <option key={m} value={m}>{m}</option>
+
+        {/* Row 2: Date filters + Add filter */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {([
+            { key: "all" as DateFilter, label: "Alla datum" },
+            { key: "this_month" as DateFilter, label: "Denna månad" },
+            { key: "this_year" as DateFilter, label: "Detta år" },
+            { key: "custom" as DateFilter, label: "Anpassat" },
+          ] as { key: DateFilter; label: string }[]).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setDateFilter(key)}
+              className={cn(
+                "text-xs px-3 py-1.5 rounded-lg border transition-colors",
+                dateFilter === key
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              {label}
+            </button>
           ))}
-        </select>
-        <input
-          value={q}
-          onChange={e => setQ(e.target.value)}
-          placeholder="Sök uppgift…"
-          className="text-xs border border-border rounded-xl px-3 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 w-40"
-        />
-      </div>
 
-      {/* Table */}
-      <div className="rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              <th className="w-10 px-3 py-2.5" />
-              <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 py-2.5">Uppgift</th>
-              <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 py-2.5">Ansvarig</th>
-              <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 py-2.5">Kund</th>
-              <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 py-2.5">Deadline</th>
-              <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 py-2.5">Status</th>
-              <th className="w-20 px-3 py-2.5" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-14 text-center text-sm text-muted-foreground">
-                  {tasks.length === 0 ? "Inga uppgifter — tryck på \"Ny uppgift\" för att lägga till" : "Inga uppgifter matchar filtret"}
-                </td>
-              </tr>
+          {dateFilter === "custom" && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customStart}
+                onChange={e => setCustomStart(e.target.value)}
+                className="text-xs px-2 py-1.5 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <span className="text-xs text-muted-foreground">→</span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={e => setCustomEnd(e.target.value)}
+                className="text-xs px-2 py-1.5 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+          )}
+
+          {/* Add filter button */}
+          <div ref={filterMenuRef} className="relative">
+            <button
+              onClick={() => setShowFilterMenu(o => !o)}
+              className={cn(
+                "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors",
+                hasActiveFilters
+                  ? "bg-primary/10 border-primary/30 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              <Filter className="w-3 h-3" />
+              Lägg till filter
+              {hasActiveFilters && (
+                <span className="bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold">
+                  {activeFilters.employees.length + activeFilters.clients.length + activeFilters.statuses.length}
+                </span>
+              )}
+            </button>
+
+            {showFilterMenu && (
+              <div className="absolute z-50 top-full left-0 mt-1 bg-card border border-border rounded-xl shadow-lg p-4 w-72">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Filter</p>
+
+                <div className="mb-3">
+                  <p className="text-xs font-medium text-foreground mb-2">Ansvarig</p>
+                  <div className="flex flex-wrap gap-1">
+                    {members.map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setActiveFilters(f => ({
+                          ...f,
+                          employees: f.employees.includes(m) ? f.employees.filter(e => e !== m) : [...f.employees, m]
+                        }))}
+                        className={cn(
+                          "text-xs px-2 py-1 rounded-lg border transition-colors",
+                          activeFilters.employees.includes(m)
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <p className="text-xs font-medium text-foreground mb-2">Status</p>
+                  <div className="flex flex-wrap gap-1">
+                    {STATUS_OPTIONS.map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setActiveFilters(f => ({
+                          ...f,
+                          statuses: f.statuses.includes(s) ? f.statuses.filter(st => st !== s) : [...f.statuses, s]
+                        }))}
+                        className={cn(
+                          "text-xs px-2 py-1 rounded-lg border transition-colors",
+                          activeFilters.statuses.includes(s)
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        {STATUS_LABELS[s]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-2">Kund</p>
+                  <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
+                    {clients.map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => setActiveFilters(f => ({
+                          ...f,
+                          clients: f.clients.includes(c.id) ? f.clients.filter(id => id !== c.id) : [...f.clients, c.id]
+                        }))}
+                        className={cn(
+                          "text-xs px-2 py-1 rounded-lg border transition-colors",
+                          activeFilters.clients.includes(c.id)
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border text-muted-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {hasActiveFilters && (
+                  <button
+                    onClick={() => setActiveFilters({ employees: [], clients: [], statuses: [] })}
+                    className="mt-3 text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    Rensa alla filter
+                  </button>
+                )}
+              </div>
             )}
-            {filtered.map(task => {
-              const overdue = isOverdue(task.deadline, task.done)
-              const kund = task.kundId ? clients.find(c => c.id === task.kundId) : null
-              const color = TEAM_FARGER[task.assignee] ?? "#9CA3AF"
+          </div>
+        </div>
+
+        {/* Active filter chips */}
+        {hasActiveFilters && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs text-muted-foreground">Aktiva filter:</span>
+            {activeFilters.employees.map(e => (
+              <span key={e} className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                {e}
+                <button onClick={() => removeFilter("employees", e)}><X className="w-3 h-3" /></button>
+              </span>
+            ))}
+            {activeFilters.statuses.map(s => (
+              <span key={s} className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                {STATUS_LABELS[s]}
+                <button onClick={() => removeFilter("statuses", s)}><X className="w-3 h-3" /></button>
+              </span>
+            ))}
+            {activeFilters.clients.map(id => {
+              const name = clients.find(c => c.id === id)?.name ?? String(id)
               return (
-                <tr key={task.id} className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors last:border-b-0", task.done && "opacity-50")}>
-                  <td className="px-3 py-2.5">
-                    <button
-                      onClick={() => toggleDone(task.id)}
-                      className={cn(
-                        "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors",
-                        task.done ? "bg-teal-500 border-teal-500 text-white" : "border-border hover:border-primary"
-                      )}
-                    >
-                      {task.done && <Check className="w-3 h-3" />}
-                    </button>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span className={cn("font-medium text-foreground", task.done && "line-through")}>{task.title}</span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    {task.assignee ? (
-                      <span className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full flex items-center justify-center text-[0.6rem] font-bold text-white shrink-0" style={{ background: color }}>
-                          {task.assignee[0]}
-                        </span>
-                        <span className="text-sm text-foreground">{task.assignee}</span>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    {kund ? (
-                      <Link href={`/kunder/${kund.id}`} className="text-sm text-primary hover:underline">
-                        {kund.name}
-                      </Link>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span className={cn("text-sm", overdue ? "text-red-500 font-semibold" : "text-muted-foreground")}>
-                      {fmtDate(task.deadline)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    {task.done ? (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300">Klar</span>
-                    ) : overdue ? (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Försenad</span>
-                    ) : (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Pågående</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setModal(task)} className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => deleteTask(task.id)} className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                <span key={id} className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                  {name}
+                  <button onClick={() => removeFilter("clients", id)}><X className="w-3 h-3" /></button>
+                </span>
               )
             })}
-          </tbody>
-        </table>
+          </div>
+        )}
       </div>
 
-      {modal && (
-        <TaskModal
-          initial={modal === "new" ? undefined : modal}
-          clients={clients}
-          onSave={handleSave}
-          onClose={() => setModal(null)}
-        />
+      {/* Content */}
+      {view === "by_employee" ? (
+        <div>
+          {members.map(member => {
+            const memberTasks = filtered.filter(t => t.assignee === member)
+            return (
+              <EmployeeGroup
+                key={member}
+                name={member}
+                tasks={memberTasks}
+                clients={clients}
+                onStatusChange={handleStatusChange}
+                onEdit={openEditTask}
+                onDuplicate={handleDuplicate}
+                onDelete={handleDelete}
+                onAddTask={() => openNewTask(member)}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={handleSort}
+              />
+            )
+          })}
+          {unassigned.length > 0 && (
+            <EmployeeGroup
+              name="Ej tilldelad"
+              tasks={unassigned}
+              clients={clients}
+              onStatusChange={handleStatusChange}
+              onEdit={openEditTask}
+              onDuplicate={handleDuplicate}
+              onDelete={handleDelete}
+              onAddTask={() => openNewTask()}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border overflow-hidden">
+          <table className="w-full text-sm">
+            <TableHead sortKey={sortKey} sortDir={sortDir} onSort={handleSort} showAssignee />
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-14 text-center text-xs text-muted-foreground">
+                    {tasks.length === 0 ? "Inga tasks ännu — skapa den första!" : "Inga tasks matchar filtret"}
+                  </td>
+                </tr>
+              ) : filtered.map(t => {
+                const kundName = clients.find(c => c.id === t.kundId)?.name ?? ""
+                return (
+                  <TaskRow
+                    key={t.id}
+                    task={t}
+                    kundName={kundName}
+                    showAssignee
+                    onStatusChange={s => handleStatusChange(t.id, s)}
+                    onEdit={() => openEditTask(t)}
+                    onDuplicate={() => handleDuplicate(t)}
+                    onDelete={() => handleDelete(t.id)}
+                  />
+                )
+              })}
+            </tbody>
+          </table>
+          <div className="border-t border-border px-4 py-2 bg-muted/10">
+            <button
+              onClick={() => openNewTask()}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg px-2 py-1.5 transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Ny task
+            </button>
+          </div>
+        </div>
       )}
+
+      <TaskModal
+        open={modalOpen}
+        initial={editingTask}
+        clients={clients}
+        onSave={handleSave}
+        onClose={() => { setModalOpen(false); setEditingTask(null) }}
+      />
     </main>
   )
 }
