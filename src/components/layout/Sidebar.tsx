@@ -10,10 +10,8 @@ import {
   Calendar,
   PhoneCall,
   MessageSquare,
-  Download,
-  Upload,
   ClipboardList,
-  LogOut,
+  DoorOpen,
   Clapperboard,
   ChevronDown,
   TrendingUp,
@@ -23,30 +21,10 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./ThemeToggle"
-import { useDB } from "@/lib/store"
 import { useAuth } from "@/components/providers/AuthProvider"
 import { TEAM_FARGER } from "@/lib/types"
-import type { LucideIcon } from "lucide-react"
 
 const EKONOMI_USERS = ["Emanuel", "Philip", "Jakob"]
-
-type NavItem = { href: string; label: string; icon: LucideIcon; indent?: boolean } | { separator: true }
-
-const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Översikt", icon: LayoutDashboard },
-  { href: "/kunder", label: "Kunder", icon: Users },
-  { href: "/leads", label: "Leads", icon: UserPlus, indent: true },
-  { href: "/onboarding", label: "Onboarding", icon: CheckSquare },
-  { href: "/tasks", label: "Uppgifter", icon: ClipboardList },
-  { href: "/veckoplanering", label: "Veckoplanering", icon: Calendar },
-  { href: "/kundkontakt", label: "Kundkontakt", icon: PhoneCall },
-  { href: "/sms-mallar", label: "SMS-mallar", icon: MessageSquare },
-  { separator: true },
-  { href: "/content", label: "Content Creation", icon: Clapperboard },
-  { href: "/content-flow", label: "Content Flow", icon: Workflow },
-  { separator: true },
-  { href: "/hemsidor", label: "Hemsidor", icon: Globe },
-]
 
 const TEAM = [
   "Philip",
@@ -59,29 +37,51 @@ const TEAM = [
   "Emanuel",
 ]
 
+function NavLink({ href, label, icon: Icon, indent, active }: {
+  href: string
+  label: string
+  icon: React.ElementType
+  indent?: boolean
+  active: boolean
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+        indent && "ml-4 text-[0.8rem]",
+        active
+          ? "bg-primary text-primary-foreground"
+          : "text-sidebar-foreground hover:bg-accent hover:text-accent-foreground"
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      {label}
+    </Link>
+  )
+}
+
+function SubNav({ show, children }: { show: boolean; children: React.ReactNode }) {
+  return (
+    <div className={cn(
+      "grid transition-all duration-200 ease-in-out",
+      show ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+    )}>
+      <div className="overflow-hidden">
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { exportData, importData } = useDB()
   const { user, logout } = useAuth()
   const [teamOpen, setTeamOpen] = useState(true)
 
-  function handleImport() {
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = ".json"
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file) return
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        const text = ev.target?.result as string
-        importData(text)
-      }
-      reader.readAsText(file)
-    }
-    input.click()
-  }
+  const showLeads = pathname.startsWith("/kunder") || pathname === "/leads"
+  const showContentFlow = pathname.startsWith("/content")
 
   function handleLogout() {
     logout()
@@ -103,44 +103,36 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-        {NAV_ITEMS.map((item, i) => {
-          if ("separator" in item) {
-            return <div key={`sep-${i}`} className="my-2 mx-1 border-t border-border" />
-          }
-          const { href, label, icon: Icon, indent } = item
-          const isActive = pathname === href
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
-                indent && "ml-4 text-[0.8rem]",
-                isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {label}
-            </Link>
-          )
-        })}
+        <NavLink href="/"           label="Översikt"        icon={LayoutDashboard} active={pathname === "/"} />
+        <NavLink href="/kunder"     label="Kunder"          icon={Users}           active={pathname === "/kunder"} />
+        <SubNav show={showLeads}>
+          <div className="pb-0.5">
+            <NavLink href="/leads"  label="Leads"           icon={UserPlus}        active={pathname === "/leads"} indent />
+          </div>
+        </SubNav>
+        <NavLink href="/onboarding" label="Onboarding"      icon={CheckSquare}     active={pathname === "/onboarding"} />
+        <NavLink href="/tasks"      label="Uppgifter"       icon={ClipboardList}   active={pathname === "/tasks"} />
+        <NavLink href="/veckoplanering" label="Veckoplanering" icon={Calendar}     active={pathname === "/veckoplanering"} />
+        <NavLink href="/kundkontakt" label="Kundkontakt"    icon={PhoneCall}       active={pathname === "/kundkontakt"} />
+        <NavLink href="/sms-mallar" label="SMS-mallar"      icon={MessageSquare}   active={pathname === "/sms-mallar"} />
+
+        <div className="my-2 mx-1 border-t border-border" />
+
+        <NavLink href="/content"    label="Content Creation" icon={Clapperboard}  active={pathname === "/content"} />
+        <SubNav show={showContentFlow}>
+          <div className="pb-0.5">
+            <NavLink href="/content-flow" label="Content Flow" icon={Workflow}    active={pathname === "/content-flow"} indent />
+          </div>
+        </SubNav>
+
+        <div className="my-2 mx-1 border-t border-border" />
+
+        <NavLink href="/hemsidor"   label="Hemsidor"        icon={Globe}           active={pathname === "/hemsidor"} />
+
         {user && EKONOMI_USERS.includes(user.name) && (
           <>
             <div className="my-2 mx-1 border-t border-border" />
-            <Link
-              href="/ekonomi"
-              className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
-                pathname === "/ekonomi"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-            >
-              <TrendingUp className="h-4 w-4 shrink-0" />
-              Ekonomi
-            </Link>
+            <NavLink href="/ekonomi" label="Ekonomi"        icon={TrendingUp}      active={pathname === "/ekonomi"} />
           </>
         )}
       </nav>
@@ -162,10 +154,7 @@ export function Sidebar() {
         {teamOpen && (
           <div className="space-y-0.5">
             {TEAM.map((name) => (
-              <div
-                key={name}
-                className="flex items-center gap-2.5 rounded-lg px-2 py-1.5"
-              >
+              <div key={name} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
                 <div
                   className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0"
                   style={{ background: TEAM_FARGER[name] ?? "#9CA3AF" }}
@@ -179,51 +168,29 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Logged in user */}
+      {/* Footer — profil + tema + logga ut */}
       {user && (
-        <div className="px-3 py-3 border-t border-border">
-          <div className="flex items-center gap-2.5 rounded-xl px-2 py-2">
-            <div
-              className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-              style={{ background: TEAM_FARGER[user.name] ?? "#9CA3AF" }}
-            >
-              {user.name[0]}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-foreground truncate">{user.name}</p>
-              <p className="text-[10px] text-muted-foreground">Inloggad</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="h-6 w-6 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
-              title="Logga ut"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-            </button>
+        <div className="px-3 py-3 border-t border-border flex items-center gap-2">
+          <div
+            className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+            style={{ background: TEAM_FARGER[user.name] ?? "#9CA3AF" }}
+          >
+            {user.name[0]}
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-foreground truncate">{user.name}</p>
+            <p className="text-[10px] text-muted-foreground">Inloggad</p>
+          </div>
+          <ThemeToggle />
+          <button
+            onClick={handleLogout}
+            className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+            title="Logga ut"
+          >
+            <DoorOpen className="h-3.5 w-3.5" />
+          </button>
         </div>
       )}
-
-      {/* Footer */}
-      <div className="px-3 py-3 border-t border-border flex items-center justify-between">
-        <div className="flex gap-1">
-          <button
-            onClick={exportData}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Exportera data"
-          >
-            <Download className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={handleImport}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Importera data"
-          >
-            <Upload className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <ThemeToggle />
-      </div>
     </aside>
   )
 }
