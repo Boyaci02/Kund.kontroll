@@ -44,12 +44,15 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
       .channel("app_state_changes")
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "app_state" },
+        { event: "UPDATE", schema: "public", table: "app_state", filter: "id=eq.main" },
         (payload) => {
-          const remote = (payload.new as { data: DB }).data
-          setDB(remote)
-          dbRef.current = remote
-          saveDB(remote)
+          const row = payload.new as { id?: string; data?: unknown }
+          if (row?.id !== "main") return
+          const remote = row.data
+          if (!remote || typeof remote !== "object" || Array.isArray(remote)) return
+          setDB(remote as DB)
+          dbRef.current = remote as DB
+          saveDB(remote as DB)
         }
       )
       .subscribe()

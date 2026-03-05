@@ -65,7 +65,9 @@ export function useSyncedState<T>(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "app_state", filter: `id=eq.${supabaseId}` },
         (payload) => {
-          const remote = (payload.new as { data: unknown }).data
+          const row = payload.new as { id?: string; data?: unknown }
+          if (row?.id !== supabaseId) return
+          const remote = row.data
           const parsed = migrate ? migrate(remote) : (remote as T)
           setState(parsed)
           stateRef.current = parsed
