@@ -1,9 +1,16 @@
 "use client"
 
-import { cfDLeft, cfPct, cfGetList, STATUS_LABELS } from "@/lib/contentflow-data"
+import { cfDLeft, cfGetList, STATUS_LABELS } from "@/lib/contentflow-data"
 import type { CFClient, CFMember, CFFilter, CFSortCol } from "@/lib/contentflow-types"
 import { LayoutGrid } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+const WEEK_COLORS: Record<string, string> = {
+  v1: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+  v2: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  v3: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  v4: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
+}
 
 const BOARD_COLS = ["scheduled", "inprogress", "review", "delivered"] as const
 const COL_COLORS: Record<string, string> = {
@@ -51,9 +58,8 @@ export default function ClientBoard({
                 </div>
               ) : cards.map(c => {
                 const dl = cfDLeft(c)
-                const pp = cfPct(c)
                 const done = c.s === "delivered"
-                const isOverdue = !done && dl < 0
+                const isOverdue = !done && dl !== Infinity && dl < 0
                 const m = team.find(x => x.id === c.assignee)
                 return (
                   <div
@@ -62,25 +68,38 @@ export default function ClientBoard({
                     className="bg-card border border-border rounded-xl p-3.5 cursor-pointer hover:shadow-sm hover:border-border/80 transition-all"
                   >
                     <div className="font-semibold text-sm text-foreground mb-0.5">{c.name}</div>
-                    {c.tag && <div className="text-xs text-muted-foreground mb-2">{c.tag}</div>}
-                    <div className="mb-2">
-                      <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
-                        <div
-                          className={cn("h-full rounded-full", done ? "bg-teal-500" : isOverdue || dl <= 67 ? "bg-red-400" : "bg-teal-500")}
-                          style={{ width: `${Math.min(100, done ? 100 : pp)}%` }}
-                        />
-                      </div>
-                      <div className={cn("text-xs mt-1", done ? "text-teal-500" : isOverdue ? "text-red-500" : dl <= 14 ? "text-amber-500" : "text-muted-foreground")}>
-                        {done ? "Levererat ✓" : isOverdue ? `${Math.abs(dl)}d försenat` : `${dl}d kvar`}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between" onClick={e => e.stopPropagation()}>
-                      {m ? (
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[0.5rem] font-bold" style={{ background: m.color }}>{m.name[0]}</span>
-                          <span className="text-xs text-muted-foreground">{m.name}</span>
+                    {c.tag && <div className="text-xs text-muted-foreground mb-1">{c.tag}</div>}
+                    {/* Week slot + recording date */}
+                    <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                      {c.weekSlot && (
+                        <span className={cn("text-[0.6rem] font-semibold px-1.5 py-0.5 rounded-full", WEEK_COLORS[c.weekSlot] ?? "bg-muted text-muted-foreground")}>
+                          {c.weekSlot.toUpperCase()}
                         </span>
-                      ) : <span />}
+                      )}
+                      {c.recordingDate && (
+                        <span className="text-[0.65rem] text-muted-foreground">{c.recordingDate}</span>
+                      )}
+                    </div>
+                    {/* Deadline status */}
+                    {!done && dl !== Infinity && (
+                      <div className={cn("text-xs mb-2", isOverdue ? "text-red-500" : dl <= 14 ? "text-amber-500" : "text-muted-foreground")}>
+                        {isOverdue ? `${Math.abs(dl)}d försenat` : `${dl}d kvar`}
+                      </div>
+                    )}
+                    {done && <div className="text-xs text-teal-500 mb-2">Levererat ✓</div>}
+                    <div className="flex items-center justify-between" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1">
+                        {[c.vg, c.ed, c.cc].filter(Boolean).slice(0, 3).map((name, idx) => (
+                          <span key={idx} className="w-4 h-4 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-[0.5rem] font-bold" title={name}>
+                            {name![0]}
+                          </span>
+                        ))}
+                        {m && (
+                          <span className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[0.5rem] font-bold" style={{ background: m.color }} title={m.name}>
+                            {m.name[0]}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex gap-1">
                         <button onClick={() => onBoard(c.id)} className="text-xs border border-border rounded px-1.5 py-0.5 hover:bg-muted transition-colors">
                           <LayoutGrid className="w-3 h-3" />

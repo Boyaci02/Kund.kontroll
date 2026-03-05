@@ -37,5 +37,3 @@ export default function KpiBand({ clients }: Props) {
   )
 }
 
-// Re-export so page can use without separate import
-export { cfDLeft }

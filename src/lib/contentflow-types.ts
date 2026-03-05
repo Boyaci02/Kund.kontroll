@@ -12,26 +12,34 @@ export interface CFColumn {
   cards: CFCard[]
 }
 
-export interface CFPdf {
-  name: string
-  size: number
-  data: string // base64 data URL
+/** CF-specifik state per kund — sparas i cf3-state localStorage */
+export interface CFClientState {
+  s: CFStatus
+  qc: number[]       // indices av checkade QC-punkter
+  qn: string         // QC-noteringar
+  rev: number        // revisionsantal
+  contentBoard: { columns: CFColumn[] }
+  assignee: number | null  // CF-teammedlem (för QC-granskning)
 }
 
+/** Sammanslagen vy av Kund + CFClientState — används i UI */
 export interface CFClient {
   id: number
   name: string
-  tag: string
-  last: string       // ISO date of last delivery
+  tag: string            // kund.pkg (paket)
+  recordingDate: string  // kund.nr (fritext, t.ex. "10 mars")
+  last: string           // kund.lr (senaste inspelning)
+  weekSlot: string | null // "v1"|"v2"|"v3"|"v4"|null (från veckoplanering)
+  vg: string             // videograf
+  ed: string             // editor
+  cc: string             // content creator
+  // CF-state (från CFClientState):
   s: CFStatus
-  cycle: number      // days between deliveries
-  assignee: number | null
-  notes: string
-  qc: number[]       // indices of checked QC items
-  qn: string         // QC notes
-  rev: number        // revision count
-  pdf: CFPdf | null
+  qc: number[]
+  qn: string
+  rev: number
   contentBoard: { columns: CFColumn[] }
+  assignee: number | null
 }
 
 export interface CFMember {
@@ -40,5 +48,5 @@ export interface CFMember {
   color: string
 }
 
-export type CFFilter = "all" | "overdue" | "upcoming" | "inprogress" | "review" | "delivered"
-export type CFSortCol = "name" | "status" | "due" | "cycle"
+export type CFFilter = "all" | "overdue" | "upcoming" | "inprogress" | "review" | "delivered" | "noddate"
+export type CFSortCol = "name" | "status" | "due" | "recording" | "week"

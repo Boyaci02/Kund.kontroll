@@ -1,6 +1,5 @@
-import type { CFClient, CFFilter, CFSortCol } from "./contentflow-types"
-
-export const CF_DEFAULT_CYCLE = 90
+import type { CFClient, CFClientState, CFFilter, CFSortCol, CFColumn } from "./contentflow-types"
+import type { Veckoschema } from "./types"
 
 export const CF_COLORS = [
   "#00C9B8", "#5AC8FA", "#bf7fff", "#30D158",
@@ -18,10 +17,10 @@ export const QC_ITEMS = [
 ]
 
 export const STATUS_LABELS: Record<string, string> = {
-  scheduled:  "Scheduled",
-  inprogress: "In Progress",
-  review:     "Manager Review",
-  delivered:  "Delivered",
+  scheduled:  "Planerad",
+  inprogress: "Pågår",
+  review:     "Granskning",
+  delivered:  "Levererat",
 }
 
 export const STATUS_STYLES: Record<string, string> = {
@@ -32,12 +31,20 @@ export const STATUS_STYLES: Record<string, string> = {
 }
 
 export const FILTER_LABELS: Record<string, string> = {
-  all:        "Alla klienter",
+  all:        "Alla kunder",
   overdue:    "Försenade",
   upcoming:   "Inom 14 dagar",
   inprogress: "Pågår",
   review:     "Granskning",
-  delivered:  "Levererade",
+  delivered:  "Levererat",
+  nodate:     "Ej planerade",
+}
+
+export const WEEK_LABELS: Record<string, string> = {
+  v1: "Vecka 1",
+  v2: "Vecka 2",
+  v3: "Vecka 3",
+  v4: "Vecka 4",
 }
 
 // ── localStorage helper ───────────────────────────────────────────────
@@ -52,41 +59,90 @@ export function cfLoad<T>(key: string, fallback: T): T {
   }
 }
 
-// ── Date helpers ──────────────────────────────────────────────────────
+// ── Swedish date parser ───────────────────────────────────────────────
 
-export function cfCyc(c: CFClient): number {
-  return c.cycle || CF_DEFAULT_CYCLE
+const SV_MONTHS: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, mars: 3, apr: 4, maj: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, okt: 10, nov: 11, dec: 12,
 }
 
-export function cfNextDue(c: CFClient): Date {
-  const d = new Date(c.last)
-  d.setDate(d.getDate() + cfCyc(c))
+/**
+ * Försöker tolka fritext som "10 mars", "9 mars + 11 mars" etc.
+ * Tar det FÖRSTA datumet om flera finns.
+ * Returnerar null om ej tolkbar.
+ */
+export function parseNr(nr: string): Date | null {
+  if (!nr || nr === "?" || !nr.trim()) return null
+  const m = nr.match(/(\d{1,2})\s*(jan|feb|mar|mars|apr|maj|jun|jul|aug|sep|okt|nov|dec)/i)
+  if (!m) return null
+  const day = parseInt(m[1])
+  const month = SV_MONTHS[m[2].toLowerCase()]
+  if (!month || day < 1 || day > 31) return null
+  const now = new Date()
+  let year = now.getFullYear()
+  // Om månaden redan passerat i år, anta nästa år
+  const d = new Date(year, month - 1, day)
+  if (d < now) {
+    d.setFullYear(year + 1)
+  }
   return d
 }
 
-export function cfDLeft(c: CFClient): number {
-  const n = new Date()
-  n.setHours(0, 0, 0, 0)
-  return Math.round((cfNextDue(c).getTime() - n.getTime()) / 86400000)
+/** Content-deadline = inspelningsdatum − 7 dagar */
+export function contentDeadline(nr: string): Date | null {
+  const rec = parseNr(nr)
+  if (!rec) return null
+  const d = new Date(rec)
+  d.setDate(d.getDate() - 7)
+  return d
 }
 
-export function cfPct(c: CFClient): number {
-  const s = new Date(c.last).getTime()
-  const e = cfNextDue(c).getTime()
-  const n = Date.now()
-  return Math.min(100, Math.max(0, ((n - s) / (e - s)) * 100))
+/** Dagar kvar till content-deadline. Returnerar Infinity om ej tolkbar. */
+export function cfDLeft(c: CFClient): number {
+  if (c.s === "delivered") return Infinity
+  const dl = contentDeadline(c.recordingDate)
+  if (!dl) return Infinity
+  const n = new Date()
+  n.setHours(0, 0, 0, 0)
+  return Math.round((dl.getTime() - n.getTime()) / 86400000)
 }
+
+/** Vilket vecko-slot kunden är i (v1/v2/v3/v4) */
+export function getWeekSlot(name: string, schedule: Veckoschema | null): string | null {
+  if (!schedule) return null
+  for (const [key, names] of Object.entries(schedule)) {
+    if ((names as string[]).includes(name)) return key
+  }
+  return null
+}
+
+/** Standard CF-state för en ny kund */
+export function defaultCFState(): CFClientState {
+  return {
+    s: "scheduled",
+    qc: [],
+    qn: "",
+    rev: 0,
+    contentBoard: { columns: [] as CFColumn[] },
+    assignee: null,
+  }
+}
+
+// ── Counts ────────────────────────────────────────────────────────────
 
 export function cfCounts(clients: CFClient[]) {
   return {
     all:        clients.length,
-    overdue:    clients.filter(c => cfDLeft(c) < 0 && c.s !== "delivered").length,
-    upcoming:   clients.filter(c => cfDLeft(c) >= 0 && cfDLeft(c) <= 14 && c.s !== "delivered").length,
+    overdue:    clients.filter(c => { const d = cfDLeft(c); return d !== Infinity && d < 0 && c.s !== "delivered" }).length,
+    upcoming:   clients.filter(c => { const d = cfDLeft(c); return d !== Infinity && d >= 0 && d <= 14 && c.s !== "delivered" }).length,
     inprogress: clients.filter(c => c.s === "inprogress").length,
     review:     clients.filter(c => c.s === "review").length,
     delivered:  clients.filter(c => c.s === "delivered").length,
+    nodate:     clients.filter(c => !parseNr(c.recordingDate) && c.s !== "delivered").length,
   }
 }
+
+// ── Filter + sort ─────────────────────────────────────────────────────
 
 export function cfGetList(
   clients: CFClient[],
@@ -97,6 +153,7 @@ export function cfGetList(
   filterAssignee: number | null,
 ): CFClient[] {
   let l = [...clients]
+
   if (q) {
     const lq = q.toLowerCase()
     l = l.filter(c =>
@@ -105,50 +162,42 @@ export function cfGetList(
     )
   }
   if (filterAssignee != null) l = l.filter(c => c.assignee === filterAssignee)
-  if (fil === "overdue")    l = l.filter(c => cfDLeft(c) < 0 && c.s !== "delivered")
-  if (fil === "upcoming")   l = l.filter(c => cfDLeft(c) >= 0 && cfDLeft(c) <= 14 && c.s !== "delivered")
+
+  if (fil === "overdue")    l = l.filter(c => { const d = cfDLeft(c); return d !== Infinity && d < 0 && c.s !== "delivered" })
+  if (fil === "upcoming")   l = l.filter(c => { const d = cfDLeft(c); return d !== Infinity && d >= 0 && d <= 14 && c.s !== "delivered" })
   if (fil === "inprogress") l = l.filter(c => c.s === "inprogress")
   if (fil === "review")     l = l.filter(c => c.s === "review")
   if (fil === "delivered")  l = l.filter(c => c.s === "delivered")
+  if (fil === "noddate")    l = l.filter(c => !parseNr(c.recordingDate) && c.s !== "delivered")
 
   l.sort((a, b) => {
+    // Levererade alltid sist om ej levererat-filter
     if (fil !== "delivered") {
       if (a.s === "delivered" && b.s !== "delivered") return 1
       if (b.s === "delivered" && a.s !== "delivered") return -1
     }
+
     let va: string | number
     let vb: string | number
-    if (sortCol === "name")   { va = a.name.toLowerCase();      vb = b.name.toLowerCase() }
-    else if (sortCol === "status") { va = a.s;                  vb = b.s }
-    else if (sortCol === "cycle")  { va = cfPct(a);             vb = cfPct(b) }
-    else                           { va = cfDLeft(a);           vb = cfDLeft(b) }
+
+    if (sortCol === "name")      { va = a.name.toLowerCase();   vb = b.name.toLowerCase() }
+    else if (sortCol === "status")    { va = a.s;               vb = b.s }
+    else if (sortCol === "recording") { va = parseNr(a.recordingDate)?.getTime() ?? 99999999999; vb = parseNr(b.recordingDate)?.getTime() ?? 99999999999 }
+    else if (sortCol === "week")      { va = a.weekSlot ?? "z"; vb = b.weekSlot ?? "z" }
+    else { // "due" = content deadline
+      va = cfDLeft(a) === Infinity ? 99999 : cfDLeft(a)
+      vb = cfDLeft(b) === Infinity ? 99999 : cfDLeft(b)
+    }
+
     return va < vb ? -sortDir : va > vb ? sortDir : 0
   })
+
   return l
 }
 
 export function cfTodayStr(): string {
   return new Date().toISOString().split("T")[0]
 }
-
-export function cfAgoStr(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - days)
-  return d.toISOString().split("T")[0]
-}
-
-// ── Initial seed data ─────────────────────────────────────────────────
-
-export const INIT_CF_CLIENTS: CFClient[] = [
-  { id: 1,  name: "Acme Corp",         tag: "E-commerce",  last: cfAgoStr(97),  s: "scheduled",  cycle: 90, assignee: null, notes: "Prefers short reels",     qc: [],           qn: "",           rev: 0, pdf: null, contentBoard: { columns: [] } },
-  { id: 2,  name: "BlueWave Media",    tag: "SaaS",        last: cfAgoStr(91),  s: "scheduled",  cycle: 90, assignee: null, notes: "",                        qc: [],           qn: "",           rev: 0, pdf: null, contentBoard: { columns: [] } },
-  { id: 3,  name: "Sunrise Foods",     tag: "Food & Bev",  last: cfAgoStr(85),  s: "inprogress", cycle: 90, assignee: null, notes: "Seasonal promos",         qc: [],           qn: "",           rev: 0, pdf: null, contentBoard: { columns: [] } },
-  { id: 4,  name: "NextGen Realty",    tag: "Real Estate", last: cfAgoStr(76),  s: "review",     cycle: 90, assignee: null, notes: "",                        qc: [0, 1, 2, 3], qn: "",           rev: 0, pdf: null, contentBoard: { columns: [] } },
-  { id: 5,  name: "Pixel Studio",      tag: "Design",      last: cfAgoStr(60),  s: "scheduled",  cycle: 90, assignee: null, notes: "",                        qc: [],           qn: "",           rev: 0, pdf: null, contentBoard: { columns: [] } },
-  { id: 6,  name: "OakPath Finance",   tag: "Finance",     last: cfAgoStr(28),  s: "delivered",  cycle: 90, assignee: null, notes: "",                        qc: [0,1,2,3,4,5,6], qn: "Great work!", rev: 1, pdf: null, contentBoard: { columns: [] } },
-  { id: 7,  name: "FitLife Gym",       tag: "Fitness",     last: cfAgoStr(52),  s: "scheduled",  cycle: 90, assignee: null, notes: "Motivational content",    qc: [],           qn: "",           rev: 0, pdf: null, contentBoard: { columns: [] } },
-  { id: 8,  name: "Metro Tech",        tag: "Tech",        last: cfAgoStr(12),  s: "delivered",  cycle: 90, assignee: null, notes: "",                        qc: [0,1,2,3,4,5,6], qn: "",       rev: 0, pdf: null, contentBoard: { columns: [] } },
-]
 
 export function cfNextId(clients: CFClient[]): number {
   return Math.max(0, ...clients.map(c => c.id)) + 1

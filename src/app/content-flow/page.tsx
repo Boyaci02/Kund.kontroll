@@ -1,20 +1,21 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import { toast } from "sonner"
 import {
-  cfLoad, cfTodayStr, cfGetList, cfCounts, cfNextId,
-  CF_COLORS, FILTER_LABELS,
+  cfLoad, cfTodayStr, cfGetList, cfCounts,
+  CF_COLORS, FILTER_LABELS, defaultCFState, getWeekSlot,
 } from "@/lib/contentflow-data"
-import type { CFClient, CFMember, CFFilter, CFSortCol, CFStatus } from "@/lib/contentflow-types"
+import type { CFClient, CFClientState, CFMember, CFFilter, CFSortCol } from "@/lib/contentflow-types"
+import { useDB } from "@/lib/store"
 import KpiBand from "@/components/contentflow/KpiBand"
 import ClientTable from "@/components/contentflow/ClientTable"
 import ClientBoard from "@/components/contentflow/ClientBoard"
-import ClientModal from "@/components/contentflow/ClientModal"
+import CFStateModal from "@/components/contentflow/ClientModal"
 import QcModal from "@/components/contentflow/QcModal"
 import ContentBoardModal from "@/components/contentflow/ContentBoardModal"
 import TeamModal from "@/components/contentflow/TeamModal"
-import { Table, LayoutGrid, Users, Plus, Download, X } from "lucide-react"
+import { Table, LayoutGrid, Users, Download, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // ── Advance confirm modal ─────────────────────────────────────────────
@@ -62,11 +63,18 @@ const FILTERS: { id: CFFilter; label: string }[] = [
   { id: "inprogress", label: "Pågår" },
   { id: "review",     label: "Granskning" },
   { id: "delivered",  label: "Levererade" },
+  { id: "noddate",    label: "Ej datum" },
 ]
 
 export default function ContentFlowPage() {
-  const [clients, setClients] = useState<CFClient[]>(() => cfLoad("cf3", []))
-  const [team,    setTeam]    = useState<CFMember[]>(() => cfLoad("cf3-team", []))
+  const { db } = useDB()
+
+  // CF-specifik state per kund-ID, sparat i cf3-state
+  const [cfState, setCfState] = useState<Record<number, CFClientState>>(
+    () => cfLoad("cf3-state", {})
+  )
+  const [team, setTeam] = useState<CFMember[]>(() => cfLoad("cf3-team", []))
+
   const [view,    setView]    = useState<"table" | "board">("table")
   const [fil,     setFil]     = useState<CFFilter>("all")
   const [q,       setQ]       = useState("")
@@ -75,38 +83,43 @@ export default function ContentFlowPage() {
   const [filterAssignee, setFilterAssignee] = useState<number | null>(null)
 
   // Modal states
-  const [clientModal,  setClientModal]  = useState<CFClient | null | "new">(undefined as unknown as CFClient | null | "new")
-  const [showClientModal, setShowClientModal] = useState(false)
-  const [qcClient,     setQcClient]     = useState<CFClient | null>(null)
-  const [boardClient,  setBoardClient]  = useState<CFClient | null>(null)
-  const [showTeam,     setShowTeam]     = useState(false)
-  const [advanceCfg,   setAdvanceCfg]   = useState<AdvanceConfig | null>(null)
+  const [stateModalId,  setStateModalId]  = useState<number | null>(null)
+  const [qcClient,      setQcClient]      = useState<CFClient | null>(null)
+  const [boardClient,   setBoardClient]   = useState<CFClient | null>(null)
+  const [showTeam,      setShowTeam]      = useState(false)
+  const [advanceCfg,    setAdvanceCfg]    = useState<AdvanceConfig | null>(null)
 
-  // Persist to localStorage
-  useEffect(() => { localStorage.setItem("cf3",      JSON.stringify(clients)) }, [clients])
-  useEffect(() => { localStorage.setItem("cf3-team", JSON.stringify(team))    }, [team])
+  // Persist CF state + team
+  useEffect(() => { localStorage.setItem("cf3-state", JSON.stringify(cfState)) }, [cfState])
+  useEffect(() => { localStorage.setItem("cf3-team",  JSON.stringify(team))    }, [team])
 
-  // ── Client CRUD ────────────────────────────────────────────────────
+  // ── Merge db.clients + cfState ─────────────────────────────────────
 
-  const saveClient = useCallback((editId: number | null, data: Omit<CFClient, "id" | "qc" | "qn" | "rev" | "contentBoard">) => {
-    setClients(prev => {
-      if (editId != null) {
-        return prev.map(c => c.id === editId ? { ...c, ...data } : c)
-      }
-      const id = cfNextId(prev)
-      return [...prev, { ...data, id, qc: [], qn: "", rev: 0, contentBoard: { columns: [] } }]
-    })
-    toast.success(editId != null ? `${data.name} uppdaterad` : `${data.name} tillagd`)
-    setShowClientModal(false)
-    setClientModal(null as unknown as CFClient)
+  const clients = useMemo<CFClient[]>(() =>
+    db.clients
+      .filter(k => k.st !== "INAKTIV")
+      .map(k => ({
+        id:            k.id,
+        name:          k.name,
+        tag:           k.pkg,
+        recordingDate: k.nr,
+        last:          k.lr || "",
+        weekSlot:      getWeekSlot(k.name, db.schedule),
+        vg:            k.vg,
+        ed:            k.ed,
+        cc:            k.cc,
+        ...(cfState[k.id] ?? defaultCFState()),
+      })),
+  [db.clients, db.schedule, cfState])
+
+  // ── CF state update ────────────────────────────────────────────────
+
+  const updateCFState = useCallback((id: number, patch: Partial<CFClientState>) => {
+    setCfState(prev => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? defaultCFState()), ...patch },
+    }))
   }, [])
-
-  const deleteClient = useCallback((id: number) => {
-    const c = clients.find(x => x.id === id)
-    if (!confirm(`Ta bort ${c?.name}?`)) return
-    setClients(prev => prev.filter(x => x.id !== id))
-    toast(`${c?.name} borttagen`)
-  }, [clients])
 
   // ── Status changes ─────────────────────────────────────────────────
 
@@ -116,46 +129,47 @@ export default function ContentFlowPage() {
       inprogress: {
         icon: "▷", iconBg: "bg-sky-100", iconColor: "text-sky-600",
         title: `Starta ${c.name}?`,
-        sub: "Tilldela 2 dagar för videos och innehållsplan.",
+        sub: "Markera som pågående arbete.",
         btnLabel: "▷ Starta arbete",
-        onConfirm: () => { setClients(prev => prev.map(x => x.id === id ? { ...x, s: "inprogress" } : x)); toast("Status uppdaterad") },
+        onConfirm: () => { updateCFState(id, { s: "inprogress" }); toast("Status uppdaterad") },
       },
       review: {
         icon: "◎", iconBg: "bg-violet-100", iconColor: "text-violet-600",
         title: "Skicka för granskning?",
         sub: `Skicka ${c.name} till granskningskön.`,
         btnLabel: "→ Skicka",
-        onConfirm: () => { setClients(prev => prev.map(x => x.id === id ? { ...x, s: "review" } : x)); toast("Skickad för granskning") },
+        onConfirm: () => { updateCFState(id, { s: "review" }); toast("Skickad för granskning") },
       },
     }
     setAdvanceCfg(cfgs[to])
-  }, [clients])
+  }, [clients, updateCFState])
 
   const startNewCycle = useCallback((id: number) => {
     const c = clients.find(x => x.id === id)!
     setAdvanceCfg({
       icon: "↺", iconBg: "bg-teal-100", iconColor: "text-teal-600",
       title: `Ny cykel för ${c.name}?`,
-      sub: "Återställer QC och startar om cykeln från idag.",
+      sub: "Återställer QC och startar om cykeln.",
       btnLabel: "↺ Starta ny cykel",
       onConfirm: () => {
-        setClients(prev => prev.map(x => x.id === id ? { ...x, s: "scheduled", last: cfTodayStr(), qc: [], qn: "" } : x))
+        updateCFState(id, { s: "scheduled", qc: [], qn: "" })
         toast(`Ny cykel — ${c.name}`)
       },
     })
-  }, [clients])
+  }, [clients, updateCFState])
 
   const handleQcApprove = useCallback((id: number, checks: number[], notes: string) => {
-    setClients(prev => prev.map(c => c.id === id ? { ...c, qc: checks, qn: notes, s: "delivered", last: cfTodayStr() } : c))
+    updateCFState(id, { qc: checks, qn: notes, s: "delivered" })
     toast.success(`✓ ${clients.find(x => x.id === id)?.name} godkänd`)
     setQcClient(null)
-  }, [clients])
+  }, [clients, updateCFState])
 
   const handleQcReject = useCallback((id: number, checks: number[], notes: string) => {
-    setClients(prev => prev.map(c => c.id === id ? { ...c, qc: checks, qn: notes, s: "inprogress", rev: (c.rev || 0) + 1 } : c))
-    toast(`${clients.find(x => x.id === id)?.name} — revision begärd`)
+    const c = clients.find(x => x.id === id)!
+    updateCFState(id, { qc: checks, qn: notes, s: "inprogress", rev: (c.rev || 0) + 1 })
+    toast(`${c.name} — revision begärd`)
     setQcClient(null)
-  }, [clients])
+  }, [clients, updateCFState])
 
   // ── Sort ───────────────────────────────────────────────────────────
 
@@ -176,29 +190,28 @@ export default function ContentFlowPage() {
   const removeMember = (id: number) => {
     const m = team.find(x => x.id === id)
     setTeam(prev => prev.filter(x => x.id !== id))
-    setClients(prev => prev.map(c => c.assignee === id ? { ...c, assignee: null } : c))
+    // Clear assignee from all clients that had this member
+    setCfState(prev => {
+      const updated = { ...prev }
+      for (const [k, v] of Object.entries(updated)) {
+        if (v.assignee === id) updated[Number(k)] = { ...v, assignee: null }
+      }
+      return updated
+    })
     toast(`${m?.name} borttagen`)
-  }
-
-  // ── PDF download ──────────────────────────────────────────────────
-
-  const downloadPdf = (id: number) => {
-    const c = clients.find(x => x.id === id)
-    if (!c?.pdf) return
-    const a = document.createElement("a")
-    a.href = c.pdf.data
-    a.download = c.pdf.name
-    a.click()
   }
 
   // ── CSV export ────────────────────────────────────────────────────
 
   const exportCSV = () => {
-    const header = ["Namn", "Bransch", "Status", "Tilldelad", "Nästa datum", "Dagar kvar", "Revisioner", "Anteckningar"]
+    const header = ["Namn", "Paket", "Status", "Tilldelad", "Inspelning", "Vecka", "Revisioner"]
     const rows = clients.map(c => {
       const m = team.find(x => x.id === c.assignee)
-      const dl = Math.round((new Date(c.last).getTime() + (c.cycle || 90) * 86400000 - Date.now()) / 86400000)
-      return [`"${c.name}"`, `"${c.tag || ""}"`, c.s, m ? m.name : "", "", dl, c.rev || 0, `"${(c.notes || "").replace(/"/g, '""')}"`].join(",")
+      return [
+        `"${c.name}"`, `"${c.tag || ""}"`, c.s,
+        m ? m.name : "", `"${c.recordingDate}"`,
+        c.weekSlot || "", c.rev || 0,
+      ].join(",")
     })
     const csv = [header.join(","), ...rows].join("\n")
     const a = document.createElement("a")
@@ -210,13 +223,7 @@ export default function ContentFlowPage() {
 
   const ct = cfCounts(clients)
   const list = cfGetList(clients, fil, q, sortCol, sortDir, filterAssignee)
-  const overdueCount = ct.overdue
-
-  const openClientForEdit = (id: number) => {
-    const c = clients.find(x => x.id === id) ?? null
-    setClientModal(c)
-    setShowClientModal(true)
-  }
+  const stateModalClient = stateModalId != null ? clients.find(x => x.id === stateModalId) ?? null : null
 
   // ── Render ────────────────────────────────────────────────────────
 
@@ -226,10 +233,10 @@ export default function ContentFlowPage() {
       <KpiBand clients={clients} />
 
       {/* Overdue alert */}
-      {overdueCount > 0 && fil === "all" && (
+      {ct.overdue > 0 && fil === "all" && (
         <div className="flex items-center gap-3 mx-6 mt-4 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-700 dark:text-red-300">
           <div className="w-2 h-2 rounded-full bg-red-500 shrink-0 animate-pulse" />
-          <span><strong>{overdueCount} klient{overdueCount > 1 ? "er" : ""} försenad{overdueCount > 1 ? "e" : ""}</strong> — kräver omedelbar uppmärksamhet.</span>
+          <span><strong>{ct.overdue} kund{ct.overdue > 1 ? "er" : ""} försenad{ct.overdue > 1 ? "e" : ""}</strong> — kräver omedelbar uppmärksamhet.</span>
         </div>
       )}
 
@@ -266,7 +273,7 @@ export default function ContentFlowPage() {
           <input
             value={q}
             onChange={e => setQ(e.target.value)}
-            placeholder="Sök klienter…"
+            placeholder="Sök kunder…"
             className="border border-border rounded-xl px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 w-44"
           />
           {q && <button onClick={() => setQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>}
@@ -307,18 +314,12 @@ export default function ContentFlowPage() {
         <button onClick={exportCSV} className="flex items-center gap-1.5 text-xs border border-border rounded-xl px-3 py-1.5 hover:bg-muted transition-colors">
           <Download className="w-3 h-3" /> Export
         </button>
-        <button
-          onClick={() => { setClientModal(null); setShowClientModal(true) }}
-          className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground rounded-xl px-3 py-1.5 hover:opacity-90 transition-opacity font-medium"
-        >
-          <Plus className="w-3 h-3" /> Ny klient
-        </button>
       </div>
 
       {/* Page header */}
       <div className="px-6 mb-3">
         <span className="text-sm font-medium text-foreground">{FILTER_LABELS[fil]}</span>
-        <span className="text-xs text-muted-foreground ml-2">{list.length} klient{list.length !== 1 ? "er" : ""}</span>
+        <span className="text-xs text-muted-foreground ml-2">{list.length} kund{list.length !== 1 ? "er" : ""}</span>
       </div>
 
       {/* Main view */}
@@ -331,10 +332,8 @@ export default function ContentFlowPage() {
             onAdvance={advance}
             onNewCycle={startNewCycle}
             onReview={id => setQcClient(clients.find(x => x.id === id) ?? null)}
-            onEdit={openClientForEdit}
-            onDelete={deleteClient}
+            onEdit={id => setStateModalId(id)}
             onBoard={id => setBoardClient(clients.find(x => x.id === id) ?? null)}
-            onDownloadPdf={downloadPdf}
           />
         ) : (
           <ClientBoard
@@ -343,19 +342,23 @@ export default function ContentFlowPage() {
             onAdvance={advance}
             onNewCycle={startNewCycle}
             onReview={id => setQcClient(clients.find(x => x.id === id) ?? null)}
-            onEdit={openClientForEdit}
+            onEdit={id => setStateModalId(id)}
             onBoard={id => setBoardClient(clients.find(x => x.id === id) ?? null)}
           />
         )}
       </div>
 
       {/* Modals */}
-      {showClientModal && (
-        <ClientModal
-          client={clientModal as CFClient | null}
+      {stateModalClient && (
+        <CFStateModal
+          client={stateModalClient}
           team={team}
-          onSave={data => saveClient(clientModal && typeof clientModal === "object" ? (clientModal as CFClient).id : null, data)}
-          onClose={() => { setShowClientModal(false); setClientModal(null as unknown as CFClient) }}
+          onSave={(patch) => {
+            updateCFState(stateModalClient.id, patch)
+            toast.success(`${stateModalClient.name} uppdaterad`)
+            setStateModalId(null)
+          }}
+          onClose={() => setStateModalId(null)}
         />
       )}
 
@@ -372,7 +375,7 @@ export default function ContentFlowPage() {
         <ContentBoardModal
           client={boardClient}
           onUpdate={updated => {
-            setClients(prev => prev.map(c => c.id === updated.id ? updated : c))
+            updateCFState(updated.id, { contentBoard: updated.contentBoard })
             setBoardClient(updated)
           }}
           onClose={() => setBoardClient(null)}
