@@ -86,11 +86,13 @@ export function useSyncedState<T>(
       stateRef.current = next
       try { localStorage.setItem(localKey, JSON.stringify(next)) } catch {}
       setState(next)
-      // .then() is required to trigger the actual HTTP request in Supabase JS v2
+      // Explicit callback required to trigger the HTTP request in postgrest-js
       supabase
         .from("app_state")
         .upsert({ id: supabaseId, data: next, updated_at: new Date().toISOString() })
-        .then()
+        .then(({ error }) => {
+          if (error) console.error(`[sync:${supabaseId}] upsert failed:`, error)
+        })
     },
     [supabaseId, localKey]
   )
