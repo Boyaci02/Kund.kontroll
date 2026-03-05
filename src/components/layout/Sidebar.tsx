@@ -18,6 +18,7 @@ import {
   Globe,
   Workflow,
   UserPlus,
+  Film,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./ThemeToggle"
@@ -81,7 +82,7 @@ export function Sidebar() {
   const [teamOpen, setTeamOpen] = useState(true)
 
   const showLeads = pathname.startsWith("/kunder") || pathname === "/leads"
-  const showContentFlow = pathname.startsWith("/content")
+  const showContentFlow = pathname.startsWith("/content") || pathname.startsWith("/editor-pipeline")
 
   function handleLogout() {
     logout()
@@ -120,8 +121,9 @@ export function Sidebar() {
 
         <NavLink href="/content"    label="Content Creation" icon={Clapperboard}  active={pathname === "/content"} />
         <SubNav show={showContentFlow}>
-          <div className="pb-0.5">
-            <NavLink href="/content-flow" label="Content Flow" icon={Workflow}    active={pathname === "/content-flow"} indent />
+          <div className="space-y-0.5 pb-0.5">
+            <NavLink href="/content-flow"     label="Content Flow"     icon={Workflow} active={pathname === "/content-flow"}     indent />
+            <NavLink href="/editor-pipeline"  label="Editor Pipeline"  icon={Film}     active={pathname.startsWith("/editor-pipeline")} indent />
           </div>
         </SubNav>
 

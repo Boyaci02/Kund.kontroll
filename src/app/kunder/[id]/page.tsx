@@ -38,7 +38,11 @@ import {
   RotateCcw,
   Loader2,
   ExternalLink,
+  Plus,
 } from "lucide-react"
+import { loadEpState, saveEpState, getClientRows, newRow } from "@/lib/editor-types"
+import type { EditorClientState, EditorRow } from "@/lib/editor-types"
+import EditorPipelineTable from "@/components/editor/EditorPipelineTable"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { Kund, Paket, Status } from "@/lib/types"
@@ -156,6 +160,8 @@ export default function KundkortPage() {
   const [notes, setNotes] = useState(kund?.notes ?? "")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editOpen, setEditOpen] = useState(false)
+  const [epState, setEpState] = useState<Record<number, EditorClientState>>({})
+  const [epRows, setEpRows] = useState<EditorRow[]>([])
   const [contentRecords, setContentRecords] = useState<AirtableRecord[]>([])
   const [contentLoading, setContentLoading] = useState(false)
 
@@ -170,6 +176,20 @@ export default function KundkortPage() {
       .catch(() => {})
       .finally(() => setContentLoading(false))
   }, [airtableConfig?.tableId])
+
+  useEffect(() => {
+    const state = loadEpState()
+    setEpState(state)
+    setEpRows(getClientRows(state, id))
+  }, [id])
+
+  function handleEpChange(newRows: EditorRow[]) {
+    setEpRows(newRows)
+    const updated = { ...epState, [id]: { rows: newRows } }
+    setEpState(updated)
+    saveEpState(updated)
+  }
+
   const [form, setForm] = useState<Omit<Kund, "id">>(
     kund
       ? { ...kund }
@@ -451,6 +471,38 @@ export default function KundkortPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Editor Pipeline */}
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Editor Pipeline
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleEpChange([...epRows, newRow()])}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Lägg till video
+            </button>
+            <a
+              href={`/editor-pipeline/${id}`}
+              className="text-xs text-primary hover:underline"
+            >
+              Visa alla →
+            </a>
+          </div>
+        </div>
+        <EditorPipelineTable rows={epRows} onChange={handleEpChange} compact />
+        {epRows.length === 0 && (
+          <div className="px-5 py-6 text-center text-xs text-muted-foreground">
+            Inga videos ännu —{" "}
+            <button onClick={() => handleEpChange([...epRows, newRow()])} className="text-primary hover:underline">
+              lägg till en
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Notes */}
