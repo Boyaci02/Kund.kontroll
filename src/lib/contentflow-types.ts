@@ -9,6 +9,7 @@ export interface ContentRow {
   hook: string
   notes: string     // script / anteckningar
   comments: string  // kommentarer
+  status?: "Todo" | "In progress" | "Done"  // content creation-status
 }
 
 export interface CFCard {

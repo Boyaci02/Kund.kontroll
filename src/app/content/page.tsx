@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useMemo } from "react"
 import { useDB } from "@/lib/store"
-import { useAuth } from "@/components/providers/AuthProvider"
-import { AIRTABLE_TABLE_MAP } from "@/lib/airtable-config"
-import type { AirtableRecord, AirtableStatus } from "@/lib/types"
+import { useCf } from "@/components/providers/CfProvider"
+import type { CFClientState, ContentRow } from "@/lib/contentflow-types"
 import { cn } from "@/lib/utils"
-import { Plus, X, Loader2, RefreshCw } from "lucide-react"
+import { Plus, X, Pencil, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -23,399 +22,208 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { toast } from "sonner"
 
-// ─── Swedish month helpers ────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SWEDISH_MONTHS: Record<string, number> = {
-  januari: 1, februari: 2, mars: 3, april: 4, maj: 5, juni: 6,
-  juli: 7, augusti: 8, september: 9, oktober: 10, november: 11, december: 12,
+const FORMATS = ["Reel", "Story", "TikTok", "Shorts", "YouTube", "Övrigt"]
+type ContentStatus = "Todo" | "In progress" | "Done"
+const STATUS_CYCLE: ContentStatus[] = ["Todo", "In progress", "Done"]
+
+function nextStatus(s: ContentStatus | undefined): ContentStatus {
+  const idx = STATUS_CYCLE.indexOf(s ?? "Todo")
+  return STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]
 }
 
-function parseMonthFromCategory(cat: string): number | null {
-  const lower = cat.toLowerCase()
-  for (const [name, num] of Object.entries(SWEDISH_MONTHS)) {
-    if (lower.includes(name)) return num
-  }
-  return null
-}
-
-function buildColumns(
-  recs: AirtableRecord[],
-  getCat: (r: AirtableRecord) => string
-): Array<{ key: string; label: string; monthNum: number | null; isCurrent: boolean }> {
-  const now = new Date()
-  const currentMonth = now.getMonth() + 1
-  const seen = new Set<string>()
-  recs.forEach((r) => {
-    const cat = getCat(r).trim()
-    if (cat) seen.add(cat)
-  })
-  return [...seen]
-    .map((cat) => {
-      const monthNum = parseMonthFromCategory(cat)
-      return { key: cat, label: cat, monthNum, isCurrent: monthNum === currentMonth }
-    })
-    .sort((a, b) => {
-      if (a.monthNum !== null && b.monthNum !== null) return a.monthNum - b.monthNum
-      if (a.monthNum !== null) return -1
-      if (b.monthNum !== null) return 1
-      return a.label.localeCompare(b.label, "sv")
-    })
-}
-
-// ─── Status helpers ───────────────────────────────────────────────────────────
-
-const STATUS_CYCLE: AirtableStatus[] = ["Todo", "In progress", "Done"]
-
-function nextStatus(s: AirtableStatus): AirtableStatus {
-  const idx = STATUS_CYCLE.indexOf(s)
-  return idx === -1 ? "Todo" : STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]
-}
-
-function statusClass(s: AirtableStatus) {
-  if (s === "In progress") return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-  if (s === "Done") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-  if (s === "Todo") return "bg-muted text-muted-foreground"
-  return "bg-muted/40 text-muted-foreground"
-}
-
-function statusLabel(s: AirtableStatus) {
+function statusLabel(s?: ContentStatus) {
   if (s === "In progress") return "Pågår"
   if (s === "Done") return "Klar"
-  if (s === "Todo") return "Att göra"
-  return "–"
+  return "Att göra"
+}
+
+function statusCls(s?: ContentStatus) {
+  if (s === "In progress") return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+  if (s === "Done") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+  return "bg-muted text-muted-foreground"
+}
+
+function monthKey(pubDate: string): string {
+  if (!pubDate) return ""
+  try {
+    const d = new Date(pubDate)
+    if (isNaN(d.getTime())) return ""
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+  } catch { return "" }
+}
+
+function monthLabel(key: string): string {
+  if (!key) return "Ej daterat"
+  try {
+    const [year, month] = key.split("-")
+    const d = new Date(parseInt(year), parseInt(month) - 1, 1)
+    return d.toLocaleDateString("sv-SE", { year: "numeric", month: "long" })
+  } catch { return key }
+}
+
+function currentMonthKey(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+}
+
+function groupByMonth(rows: ContentRow[]) {
+  const curKey = currentMonthKey()
+  const map = new Map<string, ContentRow[]>()
+  rows.forEach((r) => {
+    const key = monthKey(r.pubDate)
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(r)
+  })
+  const sorted = [...map.entries()].sort(([a], [b]) => {
+    if (!a && !b) return 0
+    if (!a) return 1
+    if (!b) return -1
+    return a.localeCompare(b)
+  })
+  return sorted.map(([key, rows]) => ({
+    key,
+    label: monthLabel(key),
+    isCurrent: key === curKey,
+    rows,
+  }))
+}
+
+const DEFAULT_CF_STATE: CFClientState = {
+  s: "scheduled",
+  qc: [],
+  qn: "",
+  rev: 0,
+  contentBoard: { columns: [] },
+  contentTable: [],
+  assignee: null,
+}
+
+// ─── Form ─────────────────────────────────────────────────────────────────────
+
+interface FormState {
+  title: string
+  format: string
+  pubDate: string
+  status: ContentStatus
+  hook: string
+  notes: string
+}
+
+const EMPTY_FORM: FormState = {
+  title: "", format: "Reel", pubDate: "", status: "Todo", hook: "", notes: "",
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-interface FormState {
-  name: string
-  notes: string
-  status: AirtableStatus
-}
-
-const EMPTY_FORM: FormState = { name: "", notes: "", status: "Todo" }
-
 export default function ContentPage() {
   const { db } = useDB()
-  const { user } = useAuth()
+  const { cfState, updateCfClient } = useCf()
 
-  // Only clients that have an Airtable table
-  const contentClients = db.clients.filter((c) => AIRTABLE_TABLE_MAP[c.name])
+  const activeClients = db.clients.filter((c) => c.st === "AKTIV" || c.st === "")
+  const [selectedId, setSelectedId] = useState<number | null>(activeClients[0]?.id ?? null)
 
-  const [selectedClient, setSelectedClient] = useState<string>(
-    contentClients[0]?.name ?? ""
-  )
-  const [records, setRecords] = useState<AirtableRecord[]>([])
-  const [loading, setLoading] = useState(false)
-
-  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editRecord, setEditRecord] = useState<AirtableRecord | null>(null)
-  const [dialogCategory, setDialogCategory] = useState<string>("")
+  const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
-  const [saving, setSaving] = useState(false)
+  const [collapsedUndated, setCollapsedUndated] = useState(false)
 
-  // Notes expand
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const contentTable = useMemo(
+    () => (selectedId !== null ? (cfState[selectedId]?.contentTable ?? []) : []),
+    [cfState, selectedId]
+  )
 
-  // ── Fetch records ──────────────────────────────────────────────────────────
-  const fetchRecords = useCallback(async (clientName: string) => {
-    const config = AIRTABLE_TABLE_MAP[clientName]
-    if (!config) return
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/airtable?tableId=${config.tableId}`)
-      const data = await res.json()
-      setRecords(data.records ?? [])
-    } catch {
-      toast.error("Kunde inte hämta data från Airtable")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const months = useMemo(() => groupByMonth(contentTable), [contentTable])
 
-  useEffect(() => {
-    if (selectedClient) fetchRecords(selectedClient)
-  }, [selectedClient, fetchRecords])
-
-  // ── Group records by category ──────────────────────────────────────────────
-  const config = AIRTABLE_TABLE_MAP[selectedClient]
-  const monthFieldName = config?.monthFieldName ?? ""
-
-  function getCategoryForRecord(r: AirtableRecord): string {
-    return (r.fields[monthFieldName] ?? r.fields["Month"] ?? "") as string
+  function updateTable(newTable: ContentRow[]) {
+    if (selectedId === null) return
+    const current = cfState[selectedId] ?? DEFAULT_CF_STATE
+    updateCfClient(selectedId, { ...current, contentTable: newTable })
   }
 
-  const columns = buildColumns(records, getCategoryForRecord)
-
-  // Records with empty category (truly uncategorized)
-  const uncategorizedRecords = records.filter((r) => !getCategoryForRecord(r).trim())
-
-  // ── Dialog helpers ─────────────────────────────────────────────────────────
-  function openCreate(category: string) {
-    setEditRecord(null)
-    setDialogCategory(category)
-    setForm(EMPTY_FORM)
+  function openAdd(prefillDate = "") {
+    setEditId(null)
+    setForm({ ...EMPTY_FORM, pubDate: prefillDate })
     setDialogOpen(true)
   }
 
-  function openEdit(r: AirtableRecord) {
-    setEditRecord(r)
-    setDialogCategory(getCategoryForRecord(r))
+  function openEdit(row: ContentRow) {
+    setEditId(row.id)
     setForm({
-      name: (r.fields["Name"] ?? "") as string,
-      notes: (r.fields["Notes"] ?? "") as string,
-      status: (r.fields["Status"] ?? "") as AirtableStatus,
+      title: row.title,
+      format: row.format || "Reel",
+      pubDate: row.pubDate,
+      status: row.status ?? "Todo",
+      hook: row.hook,
+      notes: row.notes,
     })
     setDialogOpen(true)
   }
 
-  async function handleSave() {
-    if (!form.name.trim()) return
-    const cfg = AIRTABLE_TABLE_MAP[selectedClient]
-    if (!cfg) return
-    setSaving(true)
-    try {
-      if (editRecord) {
-        // Update existing
-        const patchRes = await fetch("/api/airtable", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tableId: cfg.tableId,
-            recordId: editRecord.id,
-            fields: {
-              Name: form.name,
-              Notes: form.notes,
-              Status: form.status || undefined,
-            },
-          }),
-        })
-        if (!patchRes.ok) {
-          const err = await patchRes.json().catch(() => ({}))
-          throw new Error(err?.error ?? `HTTP ${patchRes.status}`)
-        }
-        toast.success("Uppdaterat!")
-      } else {
-        // Create new
-        const fields: Record<string, string> = {
-          Name: form.name,
-          Status: form.status || "Todo",
-        }
-        if (form.notes) fields["Notes"] = form.notes
-        if (dialogCategory) fields[cfg.monthFieldName] = dialogCategory
-        const postRes = await fetch("/api/airtable", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tableId: cfg.tableId, fields }),
-        })
-        if (!postRes.ok) {
-          const err = await postRes.json().catch(() => ({}))
-          throw new Error(err?.error ?? `HTTP ${postRes.status}`)
-        }
-        toast.success("Skapat!")
-      }
-      setDialogOpen(false)
-      fetchRecords(selectedClient)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Något gick fel")
-    } finally {
-      setSaving(false)
+  function handleSave() {
+    if (!form.title.trim()) return
+    if (editId !== null) {
+      updateTable(
+        contentTable.map((r) =>
+          r.id === editId
+            ? { ...r, title: form.title.trim(), format: form.format, pubDate: form.pubDate, status: form.status, hook: form.hook, notes: form.notes }
+            : r
+        )
+      )
+    } else {
+      updateTable([
+        ...contentTable,
+        {
+          id: Date.now(),
+          title: form.title.trim(),
+          format: form.format,
+          pubDate: form.pubDate,
+          status: form.status,
+          hook: form.hook,
+          notes: form.notes,
+          comments: "",
+        },
+      ])
     }
+    setDialogOpen(false)
   }
 
-  async function handleDelete() {
-    if (!editRecord) return
-    const cfg = AIRTABLE_TABLE_MAP[selectedClient]
-    if (!cfg) return
-    setSaving(true)
-    try {
-      const delRes = await fetch("/api/airtable", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableId: cfg.tableId, recordId: editRecord.id }),
-      })
-      if (!delRes.ok) {
-        const err = await delRes.json().catch(() => ({}))
-        throw new Error(err?.error ?? `HTTP ${delRes.status}`)
-      }
-      toast.success("Borttaget")
-      setDialogOpen(false)
-      fetchRecords(selectedClient)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Kunde inte ta bort")
-    } finally {
-      setSaving(false)
-    }
+  function handleDelete() {
+    if (editId === null) return
+    updateTable(contentTable.filter((r) => r.id !== editId))
+    setDialogOpen(false)
   }
 
-  async function toggleStatus(r: AirtableRecord) {
-    const cfg = AIRTABLE_TABLE_MAP[selectedClient]
-    if (!cfg) return
-    const current = (r.fields["Status"] ?? "") as AirtableStatus
-    const next = nextStatus(current)
-    // Optimistic update
-    setRecords((prev) =>
-      prev.map((rec) =>
-        rec.id === r.id ? { ...rec, fields: { ...rec.fields, Status: next } } : rec
+  function toggleStatus(row: ContentRow) {
+    updateTable(
+      contentTable.map((r) =>
+        r.id === row.id ? { ...r, status: nextStatus(r.status) } : r
       )
     )
-    await fetch("/api/airtable", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tableId: cfg.tableId,
-        recordId: r.id,
-        fields: { Status: next },
-      }),
-    })
   }
 
-  // ── Render a single content card ───────────────────────────────────────────
-  function ContentCard({ record }: { record: AirtableRecord }) {
-    const status = (record.fields["Status"] ?? "") as AirtableStatus
-    const name = (record.fields["Name"] ?? "") as string
-    const notes = (record.fields["Notes"] ?? "") as string
-    const isExpanded = expandedId === record.id
-
-    return (
-      <div className="rounded-xl border border-border bg-card p-3 space-y-2 hover:border-border/80 transition-colors">
-        <div className="flex items-start gap-2">
-          <button
-            onClick={() => toggleStatus(record)}
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0 transition-colors cursor-pointer",
-              statusClass(status)
-            )}
-            title="Klicka för att byta status"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-current" />
-            {statusLabel(status)}
-          </button>
-        </div>
-        <button
-          className="text-xs font-medium text-foreground text-left w-full hover:text-primary transition-colors leading-snug"
-          onClick={() => openEdit(record)}
-        >
-          {name || <span className="text-muted-foreground italic">Namnlös</span>}
-        </button>
-        {notes && (
-          <div>
-            <button
-              onClick={() => setExpandedId(isExpanded ? null : record.id)}
-              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {isExpanded ? "Dölj" : "Visa anteckningar"}
-            </button>
-            {isExpanded && (
-              <p className="text-[10px] text-muted-foreground mt-1 whitespace-pre-wrap leading-relaxed">
-                {notes}
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Render a month column ──────────────────────────────────────────────────
-  function MonthColumn({
-    label,
-    month,
-    isCurrent,
-    monthRecords,
-    categoryValue,
-  }: {
-    label: string
-    month: number
-    isCurrent: boolean
-    monthRecords: AirtableRecord[]
-    categoryValue: string // value to use when creating new records in this column
-  }) {
-    return (
-      <div className="flex-shrink-0 w-64">
-        <div
-          className={cn(
-            "flex items-center justify-between mb-3 pb-2 border-b",
-            isCurrent ? "border-primary" : "border-border"
-          )}
-        >
-          <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "text-sm font-semibold",
-                isCurrent ? "text-primary" : "text-foreground"
-              )}
-            >
-              {label}
-            </span>
-            {isCurrent && (
-              <span className="text-[10px] bg-primary/10 text-primary rounded-full px-1.5 py-0.5 font-medium">
-                Nu
-              </span>
-            )}
-          </div>
-          <span className="text-xs text-muted-foreground">{monthRecords.length}</span>
-        </div>
-        <div className="space-y-2">
-          {monthRecords.map((r) => (
-            <ContentCard key={r.id} record={r} />
-          ))}
-          <button
-            onClick={() => openCreate(categoryValue)}
-            className="w-full flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Lägg till
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // ── Main render ────────────────────────────────────────────────────────────
-  if (contentClients.length === 0) {
-    return (
-      <div className="p-8">
-        <p className="text-sm text-muted-foreground">Inga kunder kopplade till Airtable.</p>
-      </div>
-    )
-  }
+  const selectedName = activeClients.find((c) => c.id === selectedId)?.name ?? ""
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col min-h-screen">
       {/* Header */}
-      <div className="px-8 pt-8 pb-4 border-b border-border shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">Content Creation</h1>
-            <p className="text-sm text-muted-foreground mt-1">Airtable-synkad kanban per kund</p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2 h-8 text-xs"
-            onClick={() => fetchRecords(selectedClient)}
-            disabled={loading}
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-            Uppdatera
-          </Button>
-        </div>
+      <div className="px-6 pt-8 pb-4 border-b border-border">
+        <h1 className="text-2xl font-semibold text-foreground">Content Creation</h1>
+        <p className="text-sm text-muted-foreground mt-1">Månadsvisa videos per kund</p>
       </div>
 
-      {/* Customer horizontal scroll */}
-      <div className="px-8 py-3 border-b border-border shrink-0">
+      {/* Customer pills */}
+      <div className="px-6 py-3 border-b border-border">
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {contentClients.map((c) => (
+          {activeClients.map((c) => (
             <button
               key={c.id}
-              onClick={() => setSelectedClient(c.name)}
+              onClick={() => setSelectedId(c.id)}
               className={cn(
                 "flex-shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors border",
-                selectedClient === c.name
+                selectedId === c.id
                   ? "bg-primary text-primary-foreground border-transparent"
                   : "bg-background text-foreground border-border hover:bg-muted"
               )}
@@ -426,93 +234,227 @@ export default function ContentPage() {
         </div>
       </div>
 
-      {/* Kanban board */}
-      <div className="flex-1 overflow-auto px-8 py-6">
-        {loading ? (
-          <div className="flex items-center justify-center h-40 gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm">Hämtar från Airtable...</span>
+      {/* Content */}
+      <div className="flex-1 px-6 py-6 space-y-8 max-w-4xl">
+        {selectedId === null ? (
+          <p className="text-sm text-muted-foreground">Inga aktiva kunder.</p>
+        ) : months.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-sm text-muted-foreground mb-4">
+              Inga videos ännu för {selectedName}.
+            </p>
+            <Button
+              size="sm"
+              onClick={() => openAdd()}
+              className="gap-1.5 text-xs"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Lägg till första videon
+            </Button>
           </div>
         ) : (
-          <div className="flex gap-4 min-w-max pb-6">
-            {columns.map(({ key, label, isCurrent }) => {
-              const colRecords = records.filter((r) => getCategoryForRecord(r).trim() === key)
+          <>
+            {months.map(({ key, label, isCurrent, rows }) => {
+              const isUndated = key === ""
+              const isCollapsed = isUndated && collapsedUndated
+              // Prefill first day of the selected month for "add video"
+              const addPrefill = key
+                ? `${key}-01`
+                : ""
+
               return (
-                <MonthColumn
-                  key={key}
-                  label={label}
-                  month={0}
-                  isCurrent={isCurrent}
-                  monthRecords={colRecords}
-                  categoryValue={key}
-                />
+                <section key={key || "__undated"}>
+                  <div
+                    className={cn(
+                      "flex items-center justify-between mb-3 pb-2 border-b",
+                      isCurrent ? "border-primary" : "border-border"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <h2
+                        className={cn(
+                          "text-sm font-semibold capitalize",
+                          isCurrent ? "text-primary" : "text-foreground"
+                        )}
+                      >
+                        {label}
+                      </h2>
+                      {isCurrent && (
+                        <span className="text-[10px] bg-primary/10 text-primary rounded-full px-1.5 py-0.5 font-medium">
+                          Nu
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">{rows.length}</span>
+                      {isUndated && (
+                        <button
+                          onClick={() => setCollapsedUndated((v) => !v)}
+                          className="text-muted-foreground hover:text-foreground transition-colors ml-1"
+                        >
+                          {isCollapsed
+                            ? <ChevronDown className="h-3.5 w-3.5" />
+                            : <ChevronUp className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openAdd(addPrefill)}
+                      className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Plus className="h-3 w-3" />
+                      Lägg till
+                    </Button>
+                  </div>
+
+                  {!isCollapsed && (
+                    <div className="overflow-x-auto rounded-lg border border-border">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/40">
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Titel</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground hidden sm:table-cell">Format</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground hidden md:table-cell">Datum</th>
+                            <th className="px-3 py-2 w-10" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr
+                              key={row.id}
+                              className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                            >
+                              <td className="px-3 py-2.5 font-medium text-foreground max-w-[200px] truncate">
+                                {row.title || (
+                                  <span className="text-muted-foreground italic">Namnlös</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">
+                                {row.format || "–"}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <button
+                                  onClick={() => toggleStatus(row)}
+                                  className={cn(
+                                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors cursor-pointer",
+                                    statusCls(row.status)
+                                  )}
+                                  title="Klicka för att byta status"
+                                >
+                                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                  {statusLabel(row.status)}
+                                </button>
+                              </td>
+                              <td className="px-3 py-2.5 text-muted-foreground hidden md:table-cell">
+                                {row.pubDate || "–"}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <button
+                                  onClick={() => openEdit(row)}
+                                  className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
               )
             })}
 
-            {/* Uncategorized column */}
-            {uncategorizedRecords.length > 0 && (
-              <div className="flex-shrink-0 w-64">
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-border">
-                  <span className="text-sm font-semibold text-muted-foreground">Ej kategoriserat</span>
-                  <span className="text-xs text-muted-foreground">{uncategorizedRecords.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {uncategorizedRecords.map((r) => (
-                    <ContentCard key={r.id} record={r} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+            <button
+              onClick={() => openAdd()}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-border px-4 py-3 text-xs text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Lägg till video i ny månad
+            </button>
+          </>
         )}
       </div>
 
-      {/* Create/Edit dialog */}
+      {/* Add/Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="text-sm">
-              {editRecord ? "Redigera" : "Nytt innehåll"}
-              {dialogCategory && (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  — {dialogCategory}
-                </span>
-              )}
+              {editId !== null ? "Redigera video" : "Lägg till video"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
+          <div className="space-y-3 pt-2">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Titel *</label>
               <Input
                 className="h-8 text-sm"
-                placeholder="Vad ska göras?"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Videonamn"
+                value={form.title}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                 autoFocus
               />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Format</label>
+                <Select
+                  value={form.format || "Reel"}
+                  onValueChange={(v) => setForm((f) => ({ ...f, format: v }))}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FORMATS.map((fmt) => (
+                      <SelectItem key={fmt} value={fmt}>{fmt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Status</label>
+                <Select
+                  value={form.status}
+                  onValueChange={(v) => setForm((f) => ({ ...f, status: v as ContentStatus }))}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Todo">Att göra</SelectItem>
+                    <SelectItem value="In progress">Pågår</SelectItem>
+                    <SelectItem value="Done">Klar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Status</label>
-              <Select
-                value={form.status || "Todo"}
-                onValueChange={(v) => setForm((f) => ({ ...f, status: v as AirtableStatus }))}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Todo">Att göra</SelectItem>
-                  <SelectItem value="In progress">Pågår</SelectItem>
-                  <SelectItem value="Done">Klar</SelectItem>
-                </SelectContent>
-              </Select>
+              <label className="text-xs font-medium text-muted-foreground">Publiceringsdatum</label>
+              <Input
+                type="date"
+                className="h-8 text-xs"
+                value={form.pubDate}
+                onChange={(e) => setForm((f) => ({ ...f, pubDate: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Hook</label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="Öppningsidé..."
+                value={form.hook}
+                onChange={(e) => setForm((f) => ({ ...f, hook: e.target.value }))}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Anteckningar</label>
               <Textarea
                 className="text-xs resize-none"
-                rows={4}
-                placeholder="Beskrivning, manus, kameravinkel..."
+                rows={3}
+                placeholder="Manus, vinklar, produktlista..."
                 value={form.notes}
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
               />
@@ -521,17 +463,16 @@ export default function ContentPage() {
               <Button
                 className="flex-1 h-8 text-xs"
                 onClick={handleSave}
-                disabled={saving || !form.name.trim()}
+                disabled={!form.title.trim()}
               >
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Spara"}
+                Spara
               </Button>
-              {editRecord && (
+              {editId !== null && (
                 <Button
                   variant="destructive"
                   size="icon"
                   className="h-8 w-8"
                   onClick={handleDelete}
-                  disabled={saving}
                   title="Ta bort"
                 >
                   <X className="h-3.5 w-3.5" />
