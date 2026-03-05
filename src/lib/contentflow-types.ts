@@ -12,10 +12,22 @@ export interface ContentRow {
   status?: "Todo" | "In progress" | "Done"  // content creation-status
 }
 
+export interface CFCardComment {
+  id: number
+  text: string
+  author: string
+  createdAt: string
+}
+
 export interface CFCard {
   id: number
   title: string
   notes: string
+  hook?: string
+  status?: "idea" | "planned" | "filming" | "editing" | "published"
+  assignee?: string
+  comments?: CFCardComment[]
+  createdAt?: string
 }
 
 export interface CFColumn {

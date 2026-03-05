@@ -1,19 +1,15 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { useDB } from "@/lib/store"
 import { useCf } from "@/components/providers/CfProvider"
-import type { CFClientState, ContentRow } from "@/lib/contentflow-types"
+import type { CFClientState, CFCard, CFCardComment, CFColumn } from "@/lib/contentflow-types"
 import { cn } from "@/lib/utils"
-import { Plus, X, Pencil, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, X, Trash2, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -21,75 +17,49 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-const FORMATS = ["Reel", "Story", "TikTok", "Shorts", "YouTube", "Övrigt"]
-type ContentStatus = "Todo" | "In progress" | "Done"
-const STATUS_CYCLE: ContentStatus[] = ["Todo", "In progress", "Done"]
+const KB_BG = [
+  "bg-violet-50 dark:bg-violet-950/30",
+  "bg-sky-50 dark:bg-sky-950/30",
+  "bg-emerald-50 dark:bg-emerald-950/30",
+  "bg-amber-50 dark:bg-amber-950/30",
+  "bg-rose-50 dark:bg-rose-950/30",
+  "bg-indigo-50 dark:bg-indigo-950/30",
+  "bg-teal-50 dark:bg-teal-950/30",
+]
 
-function nextStatus(s: ContentStatus | undefined): ContentStatus {
-  const idx = STATUS_CYCLE.indexOf(s ?? "Todo")
-  return STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]
+const KB_FG = [
+  "text-violet-700 dark:text-violet-300",
+  "text-sky-700 dark:text-sky-300",
+  "text-emerald-700 dark:text-emerald-300",
+  "text-amber-700 dark:text-amber-300",
+  "text-rose-700 dark:text-rose-300",
+  "text-indigo-700 dark:text-indigo-300",
+  "text-teal-700 dark:text-teal-300",
+]
+
+const DEFAULT_COLUMNS = ["Ideer", "Planerat", "Filmning", "Klippning", "Publicerat"]
+
+type CardStatus = "idea" | "planned" | "filming" | "editing" | "published"
+
+const STATUS_OPTS: { value: CardStatus; label: string; color: string }[] = [
+  { value: "idea",      label: "Idé",        color: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
+  { value: "planned",   label: "Planerat",   color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
+  { value: "filming",   label: "Filmning",   color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
+  { value: "editing",   label: "Klippning",  color: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300" },
+  { value: "published", label: "Publicerat", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" },
+]
+
+function statusColor(s?: CardStatus) {
+  return STATUS_OPTS.find((o) => o.value === s)?.color ?? STATUS_OPTS[0].color
+}
+function statusLabel(s?: CardStatus) {
+  return STATUS_OPTS.find((o) => o.value === s)?.label ?? "Idé"
 }
 
-function statusLabel(s?: ContentStatus) {
-  if (s === "In progress") return "Pågår"
-  if (s === "Done") return "Klar"
-  return "Att göra"
-}
-
-function statusCls(s?: ContentStatus) {
-  if (s === "In progress") return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-  if (s === "Done") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-  return "bg-muted text-muted-foreground"
-}
-
-function monthKey(pubDate: string): string {
-  if (!pubDate) return ""
-  try {
-    const d = new Date(pubDate)
-    if (isNaN(d.getTime())) return ""
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-  } catch { return "" }
-}
-
-function monthLabel(key: string): string {
-  if (!key) return "Ej daterat"
-  try {
-    const [year, month] = key.split("-")
-    const d = new Date(parseInt(year), parseInt(month) - 1, 1)
-    return d.toLocaleDateString("sv-SE", { year: "numeric", month: "long" })
-  } catch { return key }
-}
-
-function currentMonthKey(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-}
-
-function groupByMonth(rows: ContentRow[]) {
-  const curKey = currentMonthKey()
-  const map = new Map<string, ContentRow[]>()
-  rows.forEach((r) => {
-    const key = monthKey(r.pubDate)
-    if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(r)
-  })
-  const sorted = [...map.entries()].sort(([a], [b]) => {
-    if (!a && !b) return 0
-    if (!a) return 1
-    if (!b) return -1
-    return a.localeCompare(b)
-  })
-  return sorted.map(([key, rows]) => ({
-    key,
-    label: monthLabel(key),
-    isCurrent: key === curKey,
-    rows,
-  }))
-}
+// ─── Default state helpers ────────────────────────────────────────────────────
 
 const DEFAULT_CF_STATE: CFClientState = {
   s: "scheduled",
@@ -101,122 +71,304 @@ const DEFAULT_CF_STATE: CFClientState = {
   assignee: null,
 }
 
-// ─── Form ─────────────────────────────────────────────────────────────────────
-
-interface FormState {
-  title: string
-  format: string
-  pubDate: string
-  status: ContentStatus
-  hook: string
-  notes: string
+function makeDefaultColumns(): CFColumn[] {
+  return DEFAULT_COLUMNS.map((label, i) => ({ id: i + 1, label, cards: [] }))
 }
 
-const EMPTY_FORM: FormState = {
-  title: "", format: "Reel", pubDate: "", status: "Todo", hook: "", notes: "",
+let _nextId = Date.now()
+function newId() { return ++_nextId }
+
+// ─── Card Panel ───────────────────────────────────────────────────────────────
+
+interface CardPanelProps {
+  card: CFCard
+  columnLabel: string
+  onSave: (updated: CFCard) => void
+  onDelete: () => void
+  onClose: () => void
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+function CardPanel({ card, columnLabel, onSave, onDelete, onClose }: CardPanelProps) {
+  const [title, setTitle] = useState(card.title)
+  const [hook, setHook] = useState(card.hook ?? "")
+  const [notes, setNotes] = useState(card.notes)
+  const [status, setStatus] = useState<CardStatus>(card.status ?? "idea")
+  const [assignee, setAssignee] = useState(card.assignee ?? "")
+  const [commentText, setCommentText] = useState("")
+  const [comments, setComments] = useState<CFCardComment[]>(card.comments ?? [])
+  const notesRef = useRef<HTMLTextAreaElement>(null)
 
-export default function ContentPage() {
+  function save() {
+    onSave({ ...card, title: title.trim() || card.title, hook, notes, status, assignee: assignee.trim(), comments })
+  }
+
+  function addComment() {
+    if (!commentText.trim()) return
+    const c: CFCardComment = {
+      id: newId(),
+      text: commentText.trim(),
+      author: "Team",
+      createdAt: new Date().toISOString(),
+    }
+    setComments((prev) => [...prev, c])
+    setCommentText("")
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+
+      {/* Panel */}
+      <div className="fixed top-0 right-0 h-full w-full max-w-md z-50 bg-card border-l border-border shadow-xl flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border shrink-0">
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">{columnLabel}</p>
+            <input
+              className="text-base font-semibold text-foreground bg-transparent outline-none w-full"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={save}
+              placeholder="Titel..."
+            />
+          </div>
+          <button onClick={onClose} className="mt-1 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground shrink-0">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {/* Status + Assignee row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Status</label>
+              <Select value={status} onValueChange={(v) => setStatus(v as CardStatus)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Assignee</label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="Namn..."
+                value={assignee}
+                onChange={(e) => setAssignee(e.target.value)}
+                onBlur={save}
+              />
+            </div>
+          </div>
+
+          {/* Hook */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Hook / Öppning</label>
+            <Input
+              className="h-8 text-xs"
+              placeholder="Hur börjar videon..."
+              value={hook}
+              onChange={(e) => setHook(e.target.value)}
+              onBlur={save}
+            />
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Anteckningar</label>
+            <Textarea
+              ref={notesRef}
+              className="text-xs resize-none min-h-[120px]"
+              placeholder="Manus, kameravinklar, produktlista, koncept..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={save}
+              rows={6}
+            />
+          </div>
+
+          {/* Comments */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+              <label className="text-xs font-medium text-muted-foreground">Kommentarer</label>
+            </div>
+            <div className="space-y-2">
+              {comments.map((c) => (
+                <div key={c.id} className="rounded-lg bg-muted/50 px-3 py-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-semibold text-foreground">{c.author}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {new Date(c.createdAt).toLocaleDateString("sv-SE")}
+                    </span>
+                  </div>
+                  <p className="text-xs text-foreground whitespace-pre-wrap">{c.text}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                className="h-7 text-xs flex-1"
+                placeholder="Skriv en kommentar..."
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addComment() } }}
+              />
+              <Button size="sm" className="h-7 text-xs px-2" onClick={addComment} disabled={!commentText.trim()}>
+                Lägg till
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-border shrink-0">
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={onDelete}
+          >
+            <Trash2 className="h-3 w-3" />
+            Radera
+          </Button>
+          <Button size="sm" className="h-7 text-xs" onClick={save}>
+            Spara
+          </Button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ─── Main Board ───────────────────────────────────────────────────────────────
+
+function ContentBoard() {
+  const searchParams = useSearchParams()
   const { db } = useDB()
   const { cfState, updateCfClient } = useCf()
 
   const activeClients = db.clients.filter((c) => c.st === "AKTIV" || c.st === "")
-  const [selectedId, setSelectedId] = useState<number | null>(activeClients[0]?.id ?? null)
 
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editId, setEditId] = useState<number | null>(null)
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
-  const [collapsedUndated, setCollapsedUndated] = useState(false)
+  // Auto-select from URL param or first client
+  const paramClientId = searchParams.get("client") ? Number(searchParams.get("client")) : null
+  const defaultId = paramClientId ?? activeClients[0]?.id ?? null
+  const [selectedId, setSelectedId] = useState<number | null>(defaultId)
 
-  const contentTable = useMemo(
-    () => (selectedId !== null ? (cfState[selectedId]?.contentTable ?? []) : []),
-    [cfState, selectedId]
+  useEffect(() => {
+    if (paramClientId !== null) setSelectedId(paramClientId)
+  }, [paramClientId])
+
+  // Board state for selected client
+  const clientState = selectedId !== null ? (cfState[selectedId] ?? DEFAULT_CF_STATE) : DEFAULT_CF_STATE
+  const columns: CFColumn[] = useMemo(
+    () => clientState.contentBoard.columns.length > 0
+      ? clientState.contentBoard.columns
+      : makeDefaultColumns(),
+    [clientState.contentBoard.columns]
   )
 
-  const months = useMemo(() => groupByMonth(contentTable), [contentTable])
+  const [dragging, setDragging] = useState<{ colId: number; cardId: number } | null>(null)
+  const [dragOver, setDragOver] = useState<number | null>(null)
+  const [selectedCard, setSelectedCard] = useState<{ colId: number; card: CFCard } | null>(null)
+  const [editingColId, setEditingColId] = useState<number | null>(null)
+  const [editingColLabel, setEditingColLabel] = useState("")
 
-  function updateTable(newTable: ContentRow[]) {
+  function saveColumns(newCols: CFColumn[]) {
     if (selectedId === null) return
-    const current = cfState[selectedId] ?? DEFAULT_CF_STATE
-    updateCfClient(selectedId, { ...current, contentTable: newTable })
-  }
-
-  function openAdd(prefillDate = "") {
-    setEditId(null)
-    setForm({ ...EMPTY_FORM, pubDate: prefillDate })
-    setDialogOpen(true)
-  }
-
-  function openEdit(row: ContentRow) {
-    setEditId(row.id)
-    setForm({
-      title: row.title,
-      format: row.format || "Reel",
-      pubDate: row.pubDate,
-      status: row.status ?? "Todo",
-      hook: row.hook,
-      notes: row.notes,
+    updateCfClient(selectedId, {
+      ...clientState,
+      contentBoard: { columns: newCols },
     })
-    setDialogOpen(true)
   }
 
-  function handleSave() {
-    if (!form.title.trim()) return
-    if (editId !== null) {
-      updateTable(
-        contentTable.map((r) =>
-          r.id === editId
-            ? { ...r, title: form.title.trim(), format: form.format, pubDate: form.pubDate, status: form.status, hook: form.hook, notes: form.notes }
-            : r
-        )
-      )
-    } else {
-      updateTable([
-        ...contentTable,
-        {
-          id: Date.now(),
-          title: form.title.trim(),
-          format: form.format,
-          pubDate: form.pubDate,
-          status: form.status,
-          hook: form.hook,
-          notes: form.notes,
-          comments: "",
-        },
-      ])
+  // ── Column operations ──────────────────────────────────────────────────────
+
+  function addColumn() {
+    const label = window.prompt("Kolumnnamn:")
+    if (!label?.trim()) return
+    const maxId = columns.reduce((m, c) => Math.max(m, c.id), 0)
+    saveColumns([...columns, { id: maxId + 1, label: label.trim(), cards: [] }])
+  }
+
+  function deleteColumn(colId: number) {
+    const col = columns.find((c) => c.id === colId)
+    if (!col) return
+    if (col.cards.length > 0 && !window.confirm(`Ta bort "${col.label}" och dess ${col.cards.length} kort?`)) return
+    saveColumns(columns.filter((c) => c.id !== colId))
+  }
+
+  function renameColumn(colId: number, label: string) {
+    saveColumns(columns.map((c) => c.id === colId ? { ...c, label } : c))
+    setEditingColId(null)
+  }
+
+  // ── Card operations ────────────────────────────────────────────────────────
+
+  function addCard(colId: number) {
+    const newCard: CFCard = {
+      id: newId(),
+      title: "Nytt kort",
+      notes: "",
+      hook: "",
+      status: "idea",
+      assignee: "",
+      comments: [],
+      createdAt: new Date().toISOString(),
     }
-    setDialogOpen(false)
+    saveColumns(columns.map((c) => c.id === colId ? { ...c, cards: [...c.cards, newCard] } : c))
+    setSelectedCard({ colId, card: newCard })
   }
 
-  function handleDelete() {
-    if (editId === null) return
-    updateTable(contentTable.filter((r) => r.id !== editId))
-    setDialogOpen(false)
+  function saveCard(colId: number, updated: CFCard) {
+    saveColumns(columns.map((c) =>
+      c.id === colId ? { ...c, cards: c.cards.map((k) => k.id === updated.id ? updated : k) } : c
+    ))
+    setSelectedCard({ colId, card: updated })
   }
 
-  function toggleStatus(row: ContentRow) {
-    updateTable(
-      contentTable.map((r) =>
-        r.id === row.id ? { ...r, status: nextStatus(r.status) } : r
-      )
-    )
+  function deleteCard(colId: number, cardId: number) {
+    saveColumns(columns.map((c) =>
+      c.id === colId ? { ...c, cards: c.cards.filter((k) => k.id !== cardId) } : c
+    ))
+    setSelectedCard(null)
   }
 
-  const selectedName = activeClients.find((c) => c.id === selectedId)?.name ?? ""
+  // ── DnD ───────────────────────────────────────────────────────────────────
+
+  function onDrop(toColId: number) {
+    if (!dragging) return
+    if (dragging.colId === toColId) { setDragging(null); setDragOver(null); return }
+    const fromCol = columns.find((c) => c.id === dragging.colId)
+    const card = fromCol?.cards.find((k) => k.id === dragging.cardId)
+    if (!card) return
+    saveColumns(columns.map((c) => {
+      if (c.id === dragging.colId) return { ...c, cards: c.cards.filter((k) => k.id !== dragging.cardId) }
+      if (c.id === toColId) return { ...c, cards: [...c.cards, card] }
+      return c
+    }))
+    setDragging(null)
+    setDragOver(null)
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col h-screen overflow-hidden">
       {/* Header */}
-      <div className="px-6 pt-8 pb-4 border-b border-border">
-        <h1 className="text-2xl font-semibold text-foreground">Content Creation</h1>
-        <p className="text-sm text-muted-foreground mt-1">Månadsvisa videos per kund</p>
+      <div className="px-6 pt-6 pb-3 border-b border-border shrink-0">
+        <h1 className="text-xl font-semibold text-foreground">Content Creation</h1>
       </div>
 
-      {/* Customer pills */}
-      <div className="px-6 py-3 border-b border-border">
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+      {/* Client tabs */}
+      <div className="px-6 py-2.5 border-b border-border shrink-0">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           {activeClients.map((c) => (
             <button
               key={c.id}
@@ -234,261 +386,175 @@ export default function ContentPage() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 px-6 py-6 space-y-8 max-w-4xl">
+      {/* Board toolbar */}
+      <div className="px-6 py-2 border-b border-border flex items-center gap-3 shrink-0">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+          onClick={addColumn}
+        >
+          <Plus className="h-3 w-3" />
+          Lägg till kolumn
+        </Button>
+      </div>
+
+      {/* Kanban board */}
+      <div className="flex-1 overflow-auto px-6 py-5">
         {selectedId === null ? (
           <p className="text-sm text-muted-foreground">Inga aktiva kunder.</p>
-        ) : months.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-sm text-muted-foreground mb-4">
-              Inga videos ännu för {selectedName}.
-            </p>
-            <Button
-              size="sm"
-              onClick={() => openAdd()}
-              className="gap-1.5 text-xs"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Lägg till första videon
-            </Button>
-          </div>
         ) : (
-          <>
-            {months.map(({ key, label, isCurrent, rows }) => {
-              const isUndated = key === ""
-              const isCollapsed = isUndated && collapsedUndated
-              // Prefill first day of the selected month for "add video"
-              const addPrefill = key
-                ? `${key}-01`
-                : ""
+          <div className="flex gap-4 h-full items-start pb-6" style={{ minWidth: "max-content" }}>
+            {columns.map((col, ci) => {
+              const bg = KB_BG[ci % KB_BG.length]
+              const fg = KB_FG[ci % KB_FG.length]
+              const isOver = dragOver === col.id
 
               return (
-                <section key={key || "__undated"}>
-                  <div
-                    className={cn(
-                      "flex items-center justify-between mb-3 pb-2 border-b",
-                      isCurrent ? "border-primary" : "border-border"
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <h2
-                        className={cn(
-                          "text-sm font-semibold capitalize",
-                          isCurrent ? "text-primary" : "text-foreground"
-                        )}
+                <div
+                  key={col.id}
+                  className={cn(
+                    "w-72 shrink-0 rounded-2xl flex flex-col transition-all",
+                    bg,
+                    isOver && "ring-2 ring-primary/40"
+                  )}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(col.id) }}
+                  onDragLeave={() => setDragOver(null)}
+                  onDrop={() => onDrop(col.id)}
+                >
+                  {/* Column header */}
+                  <div className="flex items-center justify-between px-3 pt-3 pb-2">
+                    {editingColId === col.id ? (
+                      <input
+                        autoFocus
+                        className="text-xs font-semibold bg-transparent outline-none flex-1 mr-2"
+                        value={editingColLabel}
+                        onChange={(e) => setEditingColLabel(e.target.value)}
+                        onBlur={() => renameColumn(col.id, editingColLabel || col.label)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") renameColumn(col.id, editingColLabel || col.label)
+                          if (e.key === "Escape") setEditingColId(null)
+                        }}
+                      />
+                    ) : (
+                      <button
+                        className={cn("text-xs font-semibold uppercase tracking-wide truncate flex-1 text-left", fg)}
+                        onDoubleClick={() => { setEditingColId(col.id); setEditingColLabel(col.label) }}
+                        title="Dubbelklicka för att döpa om"
                       >
-                        {label}
-                      </h2>
-                      {isCurrent && (
-                        <span className="text-[10px] bg-primary/10 text-primary rounded-full px-1.5 py-0.5 font-medium">
-                          Nu
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground">{rows.length}</span>
-                      {isUndated && (
-                        <button
-                          onClick={() => setCollapsedUndated((v) => !v)}
-                          className="text-muted-foreground hover:text-foreground transition-colors ml-1"
-                        >
-                          {isCollapsed
-                            ? <ChevronDown className="h-3.5 w-3.5" />
-                            : <ChevronUp className="h-3.5 w-3.5" />}
-                        </button>
-                      )}
+                        {col.label}
+                      </button>
+                    )}
+                    <div className="flex items-center gap-1 ml-2 shrink-0">
+                      <span className={cn("text-[10px] font-medium opacity-60", fg)}>{col.cards.length}</span>
+                      <button
+                        onClick={() => deleteColumn(col.id)}
+                        className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+                        title="Radera kolumn"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => openAdd(addPrefill)}
-                      className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-                    >
-                      <Plus className="h-3 w-3" />
-                      Lägg till
-                    </Button>
                   </div>
 
-                  {!isCollapsed && (
-                    <div className="overflow-x-auto rounded-lg border border-border">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-border bg-muted/40">
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Titel</th>
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground hidden sm:table-cell">Format</th>
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground hidden md:table-cell">Datum</th>
-                            <th className="px-3 py-2 w-10" />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.map((row) => (
-                            <tr
-                              key={row.id}
-                              className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-                            >
-                              <td className="px-3 py-2.5 font-medium text-foreground max-w-[200px] truncate">
-                                {row.title || (
-                                  <span className="text-muted-foreground italic">Namnlös</span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">
-                                {row.format || "–"}
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <button
-                                  onClick={() => toggleStatus(row)}
-                                  className={cn(
-                                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors cursor-pointer",
-                                    statusCls(row.status)
-                                  )}
-                                  title="Klicka för att byta status"
-                                >
-                                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                                  {statusLabel(row.status)}
-                                </button>
-                              </td>
-                              <td className="px-3 py-2.5 text-muted-foreground hidden md:table-cell">
-                                {row.pubDate || "–"}
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <button
-                                  onClick={() => openEdit(row)}
-                                  className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </section>
+                  {/* Cards */}
+                  <div className="flex-1 px-2 space-y-2 min-h-[40px]">
+                    {col.cards.map((card) => (
+                      <div
+                        key={card.id}
+                        draggable
+                        onDragStart={() => setDragging({ colId: col.id, cardId: card.id })}
+                        onDragEnd={() => { setDragging(null); setDragOver(null) }}
+                        onClick={() => setSelectedCard({ colId: col.id, card })}
+                        className={cn(
+                          "rounded-xl bg-card border border-border p-3 cursor-pointer hover:shadow-sm transition-all select-none space-y-1.5",
+                          dragging?.cardId === card.id && "opacity-40"
+                        )}
+                      >
+                        <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2">
+                          {card.title || <span className="italic text-muted-foreground">Namnlöst kort</span>}
+                        </p>
+                        {card.hook && (
+                          <p className="text-[10px] text-muted-foreground line-clamp-1 italic">
+                            {card.hook}
+                          </p>
+                        )}
+                        {card.notes && (
+                          <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
+                            {card.notes}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+                          <span className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                            statusColor(card.status)
+                          )}>
+                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                            {statusLabel(card.status)}
+                          </span>
+                          {card.assignee && (
+                            <span className="text-[10px] text-muted-foreground bg-muted rounded-full px-1.5 py-0.5 truncate max-w-[80px]">
+                              {card.assignee}
+                            </span>
+                          )}
+                          {(card.comments?.length ?? 0) > 0 && (
+                            <span className="ml-auto flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                              <MessageSquare className="h-2.5 w-2.5" />
+                              {card.comments!.length}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Add card button */}
+                  <button
+                    onClick={() => addCard(col.id)}
+                    className={cn(
+                      "m-2 mt-2 flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs transition-colors",
+                      "text-muted-foreground hover:bg-black/5 dark:hover:bg-white/5 hover:text-foreground"
+                    )}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Lägg till
+                  </button>
+                </div>
               )
             })}
 
+            {/* Add column shortcut */}
             <button
-              onClick={() => openAdd()}
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-border px-4 py-3 text-xs text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors"
+              onClick={addColumn}
+              className="w-72 shrink-0 h-12 rounded-2xl border-2 border-dashed border-border flex items-center justify-center gap-2 text-xs text-muted-foreground hover:border-border/60 hover:text-foreground transition-colors"
             >
               <Plus className="h-3.5 w-3.5" />
-              Lägg till video i ny månad
+              Ny kolumn
             </button>
-          </>
+          </div>
         )}
       </div>
 
-      {/* Add/Edit dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-sm">
-              {editId !== null ? "Redigera video" : "Lägg till video"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Titel *</label>
-              <Input
-                className="h-8 text-sm"
-                placeholder="Videonamn"
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                autoFocus
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Format</label>
-                <Select
-                  value={form.format || "Reel"}
-                  onValueChange={(v) => setForm((f) => ({ ...f, format: v }))}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FORMATS.map((fmt) => (
-                      <SelectItem key={fmt} value={fmt}>{fmt}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Status</label>
-                <Select
-                  value={form.status}
-                  onValueChange={(v) => setForm((f) => ({ ...f, status: v as ContentStatus }))}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todo">Att göra</SelectItem>
-                    <SelectItem value="In progress">Pågår</SelectItem>
-                    <SelectItem value="Done">Klar</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Publiceringsdatum</label>
-              <Input
-                type="date"
-                className="h-8 text-xs"
-                value={form.pubDate}
-                onChange={(e) => setForm((f) => ({ ...f, pubDate: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Hook</label>
-              <Input
-                className="h-8 text-xs"
-                placeholder="Öppningsidé..."
-                value={form.hook}
-                onChange={(e) => setForm((f) => ({ ...f, hook: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Anteckningar</label>
-              <Textarea
-                className="text-xs resize-none"
-                rows={3}
-                placeholder="Manus, vinklar, produktlista..."
-                value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button
-                className="flex-1 h-8 text-xs"
-                onClick={handleSave}
-                disabled={!form.title.trim()}
-              >
-                Spara
-              </Button>
-              {editId !== null && (
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={handleDelete}
-                  title="Ta bort"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                className="h-8 text-xs px-3"
-                onClick={() => setDialogOpen(false)}
-              >
-                Avbryt
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Card panel */}
+      {selectedCard && (
+        <CardPanel
+          card={selectedCard.card}
+          columnLabel={columns.find((c) => c.id === selectedCard.colId)?.label ?? ""}
+          onSave={(updated) => saveCard(selectedCard.colId, updated)}
+          onDelete={() => deleteCard(selectedCard.colId, selectedCard.card.id)}
+          onClose={() => setSelectedCard(null)}
+        />
+      )}
     </div>
+  )
+}
+
+// ─── Page wrapper (Suspense for useSearchParams) ──────────────────────────────
+
+export default function ContentPage() {
+  return (
+    <Suspense>
+      <ContentBoard />
+    </Suspense>
   )
 }

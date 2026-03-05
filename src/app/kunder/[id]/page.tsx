@@ -588,7 +588,7 @@ export default function KundkortPage() {
             variant="ghost"
             size="sm"
             className="h-7 text-xs gap-1"
-            onClick={() => router.push("/content")}
+            onClick={() => router.push(`/content?client=${id}`)}
           >
             Öppna
             <ExternalLink className="h-3 w-3" />
