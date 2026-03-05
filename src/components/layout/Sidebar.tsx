@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Globe,
   Workflow,
+  UserPlus,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./ThemeToggle"
@@ -29,11 +30,12 @@ import type { LucideIcon } from "lucide-react"
 
 const EKONOMI_USERS = ["Emanuel", "Philip", "Jakob"]
 
-type NavItem = { href: string; label: string; icon: LucideIcon } | { separator: true }
+type NavItem = { href: string; label: string; icon: LucideIcon; indent?: boolean } | { separator: true }
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Översikt", icon: LayoutDashboard },
   { href: "/kunder", label: "Kunder", icon: Users },
+  { href: "/leads", label: "Leads", icon: UserPlus, indent: true },
   { href: "/onboarding", label: "Onboarding", icon: CheckSquare },
   { href: "/tasks", label: "Uppgifter", icon: ClipboardList },
   { href: "/veckoplanering", label: "Veckoplanering", icon: Calendar },
@@ -105,7 +107,7 @@ export function Sidebar() {
           if ("separator" in item) {
             return <div key={`sep-${i}`} className="my-2 mx-1 border-t border-border" />
           }
-          const { href, label, icon: Icon } = item
+          const { href, label, icon: Icon, indent } = item
           const isActive = pathname === href
           return (
             <Link
@@ -113,6 +115,7 @@ export function Sidebar() {
               href={href}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                indent && "ml-4 text-[0.8rem]",
                 isActive
                   ? "bg-primary text-primary-foreground"
                   : "text-sidebar-foreground hover:bg-accent hover:text-accent-foreground"
