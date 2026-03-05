@@ -1,20 +1,15 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useDB } from "@/lib/store"
-import { loadEpState, STATUS_COLORS } from "@/lib/editor-types"
-import type { EditorClientState } from "@/lib/editor-types"
+import { useEp } from "@/components/providers/EpProvider"
+import { STATUS_COLORS } from "@/lib/editor-types"
 import { cn } from "@/lib/utils"
 
 export default function EditorPipelinePage() {
   const { db } = useDB()
   const router = useRouter()
-  const [epState, setEpState] = useState<Record<number, EditorClientState>>({})
-
-  useEffect(() => {
-    setEpState(loadEpState())
-  }, [])
+  const { epState } = useEp()
 
   const clients = db.clients.filter(c => c.st === "AKTIV" || c.st === "")
 

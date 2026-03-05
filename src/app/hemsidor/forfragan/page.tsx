@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { CheckCircle, Send } from "lucide-react"
 import { REQUEST_CATEGORIES } from "@/lib/hemsidor-data"
+import { useHemsidor } from "@/components/providers/HemsidorProvider"
 
 function todayStr() {
   return new Date().toISOString().split("T")[0]
@@ -35,6 +36,7 @@ function Field({ label, required, error, children }: { label: string; required?:
 }
 
 export default function ForfraganPage() {
+  const { db, setRequests } = useHemsidor()
   const [form, setForm]       = useState(EMPTY)
   const [errors, setErrors]   = useState<Record<string,string>>({})
   const [submitted, setSubmitted] = useState<number | null>(null)
@@ -62,13 +64,12 @@ export default function ForfraganPage() {
       category:    form.category,
       title:       form.title.trim(),
       description: form.description.trim(),
-      priority:    form.priority,
-      status:      "ny",
+      priority:    form.priority as "normal" | "lag" | "bradskande",
+      status:      "ny" as const,
       submittedAt: todayStr(),
     }
 
-    const existing = JSON.parse(localStorage.getItem("crm_task_requests") || "[]")
-    localStorage.setItem("crm_task_requests", JSON.stringify([...existing, req]))
+    setRequests([...db.requests, req])
     setSubmitted(req.id)
   }
 

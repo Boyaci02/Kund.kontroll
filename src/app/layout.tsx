@@ -2,6 +2,10 @@ import type { Metadata } from "next"
 import "./globals.css"
 import { ThemeProvider } from "next-themes"
 import { DBProvider } from "@/components/providers/DBProvider"
+import { TaskProvider } from "@/components/providers/TaskProvider"
+import { EpProvider } from "@/components/providers/EpProvider"
+import { CfProvider } from "@/components/providers/CfProvider"
+import { HemsidorProvider } from "@/components/providers/HemsidorProvider"
 import { AuthProvider } from "@/components/providers/AuthProvider"
 import { AuthGuard } from "@/components/layout/AuthGuard"
 import { Toaster } from "@/components/ui/sonner"
@@ -22,14 +26,22 @@ export default function RootLayout({
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <DBProvider>
-            <TooltipProvider>
-              <AuthProvider>
-                <AuthGuard>
-                  {children}
-                </AuthGuard>
-              </AuthProvider>
-              <Toaster richColors position="bottom-right" />
-            </TooltipProvider>
+            <TaskProvider>
+              <EpProvider>
+                <CfProvider>
+                  <HemsidorProvider>
+                    <TooltipProvider>
+                      <AuthProvider>
+                        <AuthGuard>
+                          {children}
+                        </AuthGuard>
+                      </AuthProvider>
+                      <Toaster richColors position="bottom-right" />
+                    </TooltipProvider>
+                  </HemsidorProvider>
+                </CfProvider>
+              </EpProvider>
+            </TaskProvider>
           </DBProvider>
         </ThemeProvider>
       </body>

@@ -1,29 +1,14 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState } from "react"
 import { toast } from "sonner"
-import {
-  INIT_HEMSIDA_CLIENTS, INIT_HEMSIDA_LEADS, INIT_HEMSIDA_TASKS, todayStr,
-} from "@/lib/hemsidor-data"
-import type { HemsidaClient, Lead, CrmTask, OnboardingSubmission, TaskRequest, ActivityEntry } from "@/lib/hemsidor-types"
+import { useHemsidor } from "@/components/providers/HemsidorProvider"
 import HemsidorDashboard from "@/components/hemsidor/HemsidorDashboard"
 import LeadsKanban       from "@/components/hemsidor/LeadsKanban"
 import ClientsTable      from "@/components/hemsidor/ClientsTable"
 import TasksList         from "@/components/hemsidor/TasksList"
 import SubmissionsList   from "@/components/hemsidor/SubmissionsList"
 import RequestsList      from "@/components/hemsidor/RequestsList"
-
-// ─── localStorage helpers ─────────────────────────────────────────────────────
-
-function load<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback
-  try {
-    const s = localStorage.getItem(key)
-    return s ? (JSON.parse(s) as T) : fallback
-  } catch {
-    return fallback
-  }
-}
 
 // ─── Tabs definition ──────────────────────────────────────────────────────────
 
@@ -39,39 +24,14 @@ const TABS = [
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HemsidorPage() {
-  const [tab,         setTab]         = useState("dashboard")
-  const [clients,     setClients]     = useState<HemsidaClient[]>(() => load("crm_clients", INIT_HEMSIDA_CLIENTS))
-  const [leads,       setLeads]       = useState<Lead[]>(() => load("crm_leads", INIT_HEMSIDA_LEADS))
-  const [tasks,       setTasks]       = useState<CrmTask[]>(() => load("crm_tasks", INIT_HEMSIDA_TASKS))
-  const [activity,    setActivity]    = useState<ActivityEntry[]>(() => load("crm_activity", []))
-  const [submissions, setSubmissions] = useState<OnboardingSubmission[]>(() => load("crm_onboarding_submissions", []))
-  const [requests,    setRequests]    = useState<TaskRequest[]>(() => load("crm_task_requests", []))
+  const [tab, setTab] = useState("dashboard")
+  const {
+    db, setClients, setLeads, setTasks, setActivity, setSubmissions, setRequests, addActivity,
+  } = useHemsidor()
 
-  // Persist to localStorage
-  useEffect(() => { localStorage.setItem("crm_clients",  JSON.stringify(clients))  }, [clients])
-  useEffect(() => { localStorage.setItem("crm_leads",    JSON.stringify(leads))    }, [leads])
-  useEffect(() => { localStorage.setItem("crm_tasks",    JSON.stringify(tasks))    }, [tasks])
-  useEffect(() => { localStorage.setItem("crm_activity", JSON.stringify(activity)) }, [activity])
-  useEffect(() => { localStorage.setItem("crm_onboarding_submissions", JSON.stringify(submissions)) }, [submissions])
-  useEffect(() => { localStorage.setItem("crm_task_requests", JSON.stringify(requests)) }, [requests])
+  const { clients, leads, tasks, activity, submissions, requests } = db
 
-  // Poll for new submissions and requests from public form pages
-  useEffect(() => {
-    const check = () => {
-      setSubmissions(load("crm_onboarding_submissions", []))
-      setRequests(load("crm_task_requests", []))
-    }
-    const id = setInterval(check, 3000)
-    return () => clearInterval(id)
-  }, [])
-
-  const addActivity = useCallback((message: string, type = "general") => {
-    setActivity(prev => [{ id: Date.now(), message, type, date: todayStr() }, ...prev].slice(0, 100))
-  }, [])
-
-  const showToast = useCallback((message: string) => {
-    toast(message)
-  }, [])
+  const showToast = (message: string) => { toast(message) }
 
   // Badge counts
   const pendingTasks   = tasks.filter(t => t.status !== "klar" && !t.archivedAt).length

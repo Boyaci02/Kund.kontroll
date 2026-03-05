@@ -1,12 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useDB } from "@/lib/store"
-import {
-  loadEpState, saveEpState, getClientRows, newRow,
-} from "@/lib/editor-types"
-import type { EditorClientState, EditorRow } from "@/lib/editor-types"
+import { useEp } from "@/components/providers/EpProvider"
+import { newRow } from "@/lib/editor-types"
+import type { EditorRow } from "@/lib/editor-types"
 import EditorPipelineTable from "@/components/editor/EditorPipelineTable"
 import { ArrowLeft, Plus } from "lucide-react"
 
@@ -15,23 +13,13 @@ export default function EditorPipelineClientPage() {
   const kundId = Number(id)
   const { db } = useDB()
   const router = useRouter()
+  const { getClientRows, updateClientRows } = useEp()
 
   const kund = db.clients.find(c => c.id === kundId)
-
-  const [epState, setEpState] = useState<Record<number, EditorClientState>>({})
-  const [rows, setRows] = useState<EditorRow[]>([])
-
-  useEffect(() => {
-    const state = loadEpState()
-    setEpState(state)
-    setRows(getClientRows(state, kundId))
-  }, [kundId])
+  const rows = getClientRows(kundId)
 
   function handleChange(newRows: EditorRow[]) {
-    setRows(newRows)
-    const updated = { ...epState, [kundId]: { rows: newRows } }
-    setEpState(updated)
-    saveEpState(updated)
+    updateClientRows(kundId, newRows)
   }
 
   if (!kund) {

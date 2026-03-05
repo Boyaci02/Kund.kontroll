@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, useCallback, useEffect, useMemo } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { toast } from "sonner"
 import {
-  cfLoad, cfTodayStr, cfGetList, cfCounts,
+  cfTodayStr, cfGetList, cfCounts,
   CF_COLORS, FILTER_LABELS, defaultCFState, getWeekSlot,
 } from "@/lib/contentflow-data"
-import type { CFClient, CFClientState, CFMember, CFFilter, CFSortCol } from "@/lib/contentflow-types"
+import type { CFClient, CFClientState, CFFilter, CFSortCol } from "@/lib/contentflow-types"
 import { useDB } from "@/lib/store"
+import { useCf } from "@/components/providers/CfProvider"
 import KpiBand from "@/components/contentflow/KpiBand"
 import ClientTable from "@/components/contentflow/ClientTable"
 import ClientBoard from "@/components/contentflow/ClientBoard"
@@ -69,12 +70,7 @@ const FILTERS: { id: CFFilter; label: string }[] = [
 
 export default function ContentFlowPage() {
   const { db } = useDB()
-
-  // CF-specifik state per kund-ID, sparat i cf3-state
-  const [cfState, setCfState] = useState<Record<number, CFClientState>>(
-    () => cfLoad("cf3-state", {})
-  )
-  const [team, setTeam] = useState<CFMember[]>(() => cfLoad("cf3-team", []))
+  const { cfState, updateCfClient, team, setTeam } = useCf()
 
   const [view,    setView]    = useState<"table" | "board">("table")
   const [fil,     setFil]     = useState<CFFilter>("all")
@@ -90,10 +86,6 @@ export default function ContentFlowPage() {
   const [workspaceClient, setWorkspaceClient] = useState<CFClient | null>(null)
   const [showTeam,      setShowTeam]      = useState(false)
   const [advanceCfg,    setAdvanceCfg]    = useState<AdvanceConfig | null>(null)
-
-  // Persist CF state + team
-  useEffect(() => { localStorage.setItem("cf3-state", JSON.stringify(cfState)) }, [cfState])
-  useEffect(() => { localStorage.setItem("cf3-team",  JSON.stringify(team))    }, [team])
 
   // ── Merge db.clients + cfState ─────────────────────────────────────
 
@@ -117,11 +109,8 @@ export default function ContentFlowPage() {
   // ── CF state update ────────────────────────────────────────────────
 
   const updateCFState = useCallback((id: number, patch: Partial<CFClientState>) => {
-    setCfState(prev => ({
-      ...prev,
-      [id]: { ...(prev[id] ?? defaultCFState()), ...patch },
-    }))
-  }, [])
+    updateCfClient(id, { ...(cfState[id] ?? defaultCFState()), ...patch })
+  }, [cfState, updateCfClient])
 
   // ── Status changes ─────────────────────────────────────────────────
 
@@ -185,20 +174,16 @@ export default function ContentFlowPage() {
   const addMember = (name: string) => {
     const id = Math.max(0, ...team.map(m => m.id)) + 1
     const color = CF_COLORS[team.length % CF_COLORS.length]
-    setTeam(prev => [...prev, { id, name, color }])
+    setTeam([...team, { id, name, color }])
     toast(`${name} tillagd i teamet`)
   }
 
   const removeMember = (id: number) => {
     const m = team.find(x => x.id === id)
-    setTeam(prev => prev.filter(x => x.id !== id))
+    setTeam(team.filter(x => x.id !== id))
     // Clear assignee from all clients that had this member
-    setCfState(prev => {
-      const updated = { ...prev }
-      for (const [k, v] of Object.entries(updated)) {
-        if (v.assignee === id) updated[Number(k)] = { ...v, assignee: null }
-      }
-      return updated
+    Object.entries(cfState).forEach(([k, v]) => {
+      if (v.assignee === id) updateCfClient(Number(k), { ...v, assignee: null })
     })
     toast(`${m?.name} borttagen`)
   }

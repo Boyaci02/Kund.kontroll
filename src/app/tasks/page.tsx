@@ -1,11 +1,9 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useRef, useMemo, useEffect } from "react"
 import { useDB } from "@/lib/store"
-import {
-  loadTasks, saveTasks, newTaskId,
-  STATUS_LABELS, STATUS_COLORS,
-} from "@/lib/task-types"
+import { useTask } from "@/components/providers/TaskProvider"
+import { newTaskId, STATUS_LABELS, STATUS_COLORS } from "@/lib/task-types"
 import type { Task, TaskStatus, TaskPriority } from "@/lib/task-types"
 import { TEAM_MEDLEMMAR, TEAM_FARGER } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -456,7 +454,7 @@ function EmployeeGroup({ name, tasks, clients, onStatusChange, onEdit, onDuplica
 
 export default function TasksPage() {
   const { db } = useDB()
-  const [tasks, setTasks] = useState<Task[]>([])
+  const { tasks, setTasks } = useTask()
   const [view, setView] = useState<View>("all_tasks")
   const [search, setSearch] = useState("")
   const [dateFilter, setDateFilter] = useState<DateFilter>("all")
@@ -472,7 +470,6 @@ export default function TasksPage() {
 
   const clients = db.clients.filter(c => c.st === "AKTIV" || c.st === "")
 
-  useEffect(() => { setTasks(loadTasks()) }, [])
 
   useEffect(() => {
     if (!showFilterMenu) return
@@ -485,7 +482,6 @@ export default function TasksPage() {
 
   function persist(updated: Task[]) {
     setTasks(updated)
-    saveTasks(updated)
   }
 
   function handleSort(key: SortKey) {

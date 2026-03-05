@@ -40,11 +40,11 @@ import {
   ExternalLink,
   Plus,
 } from "lucide-react"
-import { loadEpState, saveEpState, getClientRows, newRow } from "@/lib/editor-types"
-import type { EditorClientState, EditorRow } from "@/lib/editor-types"
+import { newRow } from "@/lib/editor-types"
+import type { EditorRow } from "@/lib/editor-types"
 import EditorPipelineTable from "@/components/editor/EditorPipelineTable"
-import { loadTasks, saveTasks, newTaskId } from "@/lib/task-types"
-import type { Task } from "@/lib/task-types"
+import { useEp } from "@/components/providers/EpProvider"
+import { useTask } from "@/components/providers/TaskProvider"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { Kund, Paket, Status } from "@/lib/types"
@@ -162,9 +162,10 @@ export default function KundkortPage() {
   const [notes, setNotes] = useState(kund?.notes ?? "")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editOpen, setEditOpen] = useState(false)
-  const [epState, setEpState] = useState<Record<number, EditorClientState>>({})
-  const [epRows, setEpRows] = useState<EditorRow[]>([])
-  const [taskList, setTaskList] = useState<Task[]>([])
+  const { getClientRows, updateClientRows } = useEp()
+  const { tasks, addTask, updateTask } = useTask()
+  const epRows = getClientRows(id)
+  const kundTaskList = tasks.filter(t => t.kundId === id)
   const [contentRecords, setContentRecords] = useState<AirtableRecord[]>([])
   const [contentLoading, setContentLoading] = useState(false)
 
@@ -180,47 +181,20 @@ export default function KundkortPage() {
       .finally(() => setContentLoading(false))
   }, [airtableConfig?.tableId])
 
-  useEffect(() => {
-    const state = loadEpState()
-    setEpState(state)
-    setEpRows(getClientRows(state, id))
-    const loaded = loadTasks()
-    setTaskList(loaded)
-  }, [id])
-
-  const kundTaskList = taskList.filter(t => t.kundId === id)
-
   function addKundTask() {
-    const t: Task = {
-      id: newTaskId(),
-      title: "",
-      description: "",
-      assignee: "",
+    addTask({
       kundId: id,
-      startDate: "",
-      endDate: "",
       status: "not_started",
-      priority: "",
-      createdAt: new Date().toISOString(),
-    }
-    const updated = [...taskList, t]
-    setTaskList(updated)
-    saveTasks(updated)
+    })
   }
 
   function toggleKundTask(taskId: number) {
-    const updated = taskList.map(t =>
-      t.id === taskId ? { ...t, status: (t.status === "done" ? "not_started" : "done") as Task["status"] } : t
-    )
-    setTaskList(updated)
-    saveTasks(updated)
+    const t = tasks.find(t => t.id === taskId)
+    if (t) updateTask(taskId, { status: t.status === "done" ? "not_started" : "done" })
   }
 
   function handleEpChange(newRows: EditorRow[]) {
-    setEpRows(newRows)
-    const updated = { ...epState, [id]: { rows: newRows } }
-    setEpState(updated)
-    saveEpState(updated)
+    updateClientRows(id, newRows)
   }
 
   const [form, setForm] = useState<Omit<Kund, "id">>(

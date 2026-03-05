@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { CheckCircle, ChevronRight, ChevronLeft, Save, Eye } from "lucide-react"
+import { useHemsidor } from "@/components/providers/HemsidorProvider"
 
 // ─── Konstanter ───────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ function generateTasks(form: FormData, clientId: number, clientName: string) {
 // ─── Huvud-komponent ──────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
+  const { db, setDb } = useHemsidor()
   const [step,      setStep]      = useState(1)
   const [form,      setForm]      = useState<FormData>(INIT_FORM)
   const [errors,    setErrors]    = useState<Record<string, string>>({})
@@ -122,7 +124,7 @@ export default function OnboardingPage() {
     const submittedAt = new Date().toISOString().split("T")[0]
     const newClient = {
       id: Date.now(), name: form.name, contact: form.contact, email: form.email,
-      phone: form.phone, website: form.domainName || "", status: "aktiv",
+      phone: form.phone, website: form.domainName || "", status: "aktiv" as const,
       plan: "Standard", monthlyFee: 0, startDate: submittedAt,
       renewalDate: "", notes: "",
     }
@@ -130,15 +132,15 @@ export default function OnboardingPage() {
     const submission = { ...form, submittedAt }
 
     try {
-      const existingClients     = JSON.parse(localStorage.getItem("crm_clients")                   || "[]")
-      const existingTasks       = JSON.parse(localStorage.getItem("crm_tasks")                     || "[]")
-      const existingSubmissions = JSON.parse(localStorage.getItem("crm_onboarding_submissions")    || "[]")
-      localStorage.setItem("crm_clients",                JSON.stringify([...existingClients, newClient]))
-      localStorage.setItem("crm_tasks",                  JSON.stringify([...existingTasks, ...newTasks]))
-      localStorage.setItem("crm_onboarding_submissions", JSON.stringify([...existingSubmissions, submission]))
+      setDb(prev => ({
+        ...prev,
+        clients:     [...prev.clients, newClient],
+        tasks:       [...prev.tasks, ...newTasks as typeof prev.tasks[0][]],
+        submissions: [...prev.submissions, submission as typeof prev.submissions[0]],
+      }))
       localStorage.removeItem("crm_onboarding_draft")
     } catch (e) {
-      console.error("Kunde inte spara till localStorage:", e)
+      console.error("Kunde inte spara:", e)
     }
 
     setSubmitted(true)
