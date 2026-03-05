@@ -61,17 +61,16 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const update = useCallback((updater: (prev: DB) => DB) => {
-    setDB((prev) => {
-      const next = updater(prev)
-      saveDB(next)
-      dbRef.current = next
-      supabase.from("app_state").upsert({
-        id: "main",
-        data: next,
-        updated_at: new Date().toISOString(),
+    const next = updater(dbRef.current)
+    saveDB(next)
+    dbRef.current = next
+    setDB(next)
+    supabase
+      .from("app_state")
+      .upsert({ id: "main", data: next, updated_at: new Date().toISOString() })
+      .then((result) => {
+        if (result?.error) console.error("[sync:main] upsert failed:", result.error)
       })
-      return next
-    })
   }, [])
 
   const addKund = useCallback(
