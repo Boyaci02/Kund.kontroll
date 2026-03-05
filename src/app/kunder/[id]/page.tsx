@@ -43,6 +43,8 @@ import {
 import { loadEpState, saveEpState, getClientRows, newRow } from "@/lib/editor-types"
 import type { EditorClientState, EditorRow } from "@/lib/editor-types"
 import EditorPipelineTable from "@/components/editor/EditorPipelineTable"
+import { loadTasks, saveTasks, newTaskId } from "@/lib/task-types"
+import type { Task } from "@/lib/task-types"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { Kund, Paket, Status } from "@/lib/types"
@@ -162,6 +164,7 @@ export default function KundkortPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [epState, setEpState] = useState<Record<number, EditorClientState>>({})
   const [epRows, setEpRows] = useState<EditorRow[]>([])
+  const [taskList, setTaskList] = useState<Task[]>([])
   const [contentRecords, setContentRecords] = useState<AirtableRecord[]>([])
   const [contentLoading, setContentLoading] = useState(false)
 
@@ -181,7 +184,32 @@ export default function KundkortPage() {
     const state = loadEpState()
     setEpState(state)
     setEpRows(getClientRows(state, id))
+    const loaded = loadTasks()
+    setTaskList(loaded)
   }, [id])
+
+  const kundTaskList = taskList.filter(t => t.kundId === id)
+
+  function addKundTask() {
+    const t: Task = {
+      id: newTaskId(),
+      title: "",
+      assignee: "",
+      kundId: id,
+      deadline: "",
+      done: false,
+      createdAt: new Date().toISOString(),
+    }
+    const updated = [...taskList, t]
+    setTaskList(updated)
+    saveTasks(updated)
+  }
+
+  function toggleKundTask(taskId: number) {
+    const updated = taskList.map(t => t.id === taskId ? { ...t, done: !t.done } : t)
+    setTaskList(updated)
+    saveTasks(updated)
+  }
 
   function handleEpChange(newRows: EditorRow[]) {
     setEpRows(newRows)
@@ -501,6 +529,61 @@ export default function KundkortPage() {
             <button onClick={() => handleEpChange([...epRows, newRow()])} className="text-primary hover:underline">
               lägg till en
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Tasks */}
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Uppgifter</h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={addKundTask}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Lägg till
+            </button>
+            <a href="/tasks" className="text-xs text-primary hover:underline">Visa alla →</a>
+          </div>
+        </div>
+        {kundTaskList.length === 0 ? (
+          <div className="px-5 py-6 text-center text-xs text-muted-foreground">
+            Inga uppgifter kopplade till denna kund —{" "}
+            <button onClick={addKundTask} className="text-primary hover:underline">lägg till en</button>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {kundTaskList.map(t => {
+              const overdue = !t.done && !!t.deadline && new Date(t.deadline) < new Date()
+              const color = TEAM_FARGER[t.assignee] ?? "#9CA3AF"
+              return (
+                <div key={t.id} className="flex items-center gap-3 px-5 py-3">
+                  <button
+                    onClick={() => toggleKundTask(t.id)}
+                    className={cn(
+                      "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
+                      t.done ? "bg-teal-500 border-teal-500 text-white" : "border-border hover:border-primary"
+                    )}
+                  >
+                    {t.done && <span className="text-[8px] font-bold">✓</span>}
+                  </button>
+                  <span className={cn("flex-1 text-sm text-foreground", t.done && "line-through opacity-50")}>
+                    {t.title || <span className="italic text-muted-foreground">Utan titel</span>}
+                  </span>
+                  {t.assignee && (
+                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[0.55rem] font-bold text-white shrink-0" style={{ background: color }} title={t.assignee}>
+                      {t.assignee[0]}
+                    </span>
+                  )}
+                  {t.deadline && (
+                    <span className={cn("text-xs shrink-0", overdue ? "text-red-500 font-semibold" : "text-muted-foreground")}>
+                      {new Date(t.deadline).toLocaleDateString("sv-SE", { day: "numeric", month: "short" })}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

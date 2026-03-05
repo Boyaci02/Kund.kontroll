@@ -112,7 +112,7 @@ export function Sidebar() {
           </div>
         </SubNav>
         <NavLink href="/onboarding" label="Onboarding"      icon={CheckSquare}     active={pathname === "/onboarding"} />
-        <NavLink href="/tasks"      label="Uppgifter"       icon={ClipboardList}   active={pathname === "/tasks"} />
+        <NavLink href="/tasks"      label="Tasks"           icon={ClipboardList}   active={pathname === "/tasks"} />
         <NavLink href="/veckoplanering" label="Veckoplanering" icon={Calendar}     active={pathname === "/veckoplanering"} />
         <NavLink href="/kundkontakt" label="Kundkontakt"    icon={PhoneCall}       active={pathname === "/kundkontakt"} />
         <NavLink href="/sms-mallar" label="SMS-mallar"      icon={MessageSquare}   active={pathname === "/sms-mallar"} />
