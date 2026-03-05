@@ -90,8 +90,8 @@ export function useSyncedState<T>(
       supabase
         .from("app_state")
         .upsert({ id: supabaseId, data: next, updated_at: new Date().toISOString() })
-        .then(({ error }) => {
-          if (error) console.error(`[sync:${supabaseId}] upsert failed:`, error)
+        .then((result) => {
+          if (result?.error) console.error(`[sync:${supabaseId}] upsert failed:`, result.error)
         })
     },
     [supabaseId, localKey]
