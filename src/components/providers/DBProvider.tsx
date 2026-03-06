@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import { DBContext, loadDB, saveDB, getInitialDB } from "@/lib/store"
-import type { DB, Kund, Lead, Veckoschema } from "@/lib/types"
-import { SCHEMA } from "@/lib/data"
+import type { DB, Kund, KontaktPost, KontaktTyp, Lead, Veckoschema } from "@/lib/types"
+import { SCHEMA, KONTAKTER } from "@/lib/data"
 import { supabase } from "@/lib/supabase"
 
 export function DBProvider({ children }: { children: React.ReactNode }) {
@@ -24,17 +24,28 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         .eq("id", "main")
         .single()
 
+      let current = local
       if (!error && data?.data && Object.keys(data.data).length > 0) {
-        const remote = data.data as DB
-        setDB(remote)
-        dbRef.current = remote
-        saveDB(remote)
-      } else {
-        // Första gången — seed Supabase med lokala data
-        await supabase
-          .from("app_state")
-          .upsert({ id: "main", data: local, updated_at: new Date().toISOString() })
+        current = data.data as DB
       }
+
+      // Seed contacts from static KONTAKTER if not yet initialized
+      if (!current.contacts || current.contacts.length === 0) {
+        let id = current.nextContactId ?? 1
+        const seeded: KontaktPost[] = [
+          ...KONTAKTER.booking.map((k) => ({ ...k, id: id++, typ: "booking" as KontaktTyp })),
+          ...KONTAKTER.sms.map((k) => ({ ...k, id: id++, typ: "sms" as KontaktTyp })),
+          ...KONTAKTER.quarterly.map((k) => ({ ...k, id: id++, typ: "quarterly" as KontaktTyp })),
+        ]
+        current = { ...current, contacts: seeded, nextContactId: id }
+      }
+
+      setDB(current)
+      dbRef.current = current
+      saveDB(current)
+      await supabase
+        .from("app_state")
+        .upsert({ id: "main", data: current, updated_at: new Date().toISOString() })
     }
 
     init()
@@ -254,6 +265,50 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
     [update]
   )
 
+  const addContact = useCallback(
+    (contact: Omit<KontaktPost, "id">) => {
+      update((prev) => ({
+        ...prev,
+        contacts: [...(prev.contacts ?? []), { ...contact, id: prev.nextContactId ?? 1 }],
+        nextContactId: (prev.nextContactId ?? 1) + 1,
+      }))
+    },
+    [update]
+  )
+
+  const updateContact = useCallback(
+    (contact: KontaktPost) => {
+      update((prev) => ({
+        ...prev,
+        contacts: (prev.contacts ?? []).map((c) => (c.id === contact.id ? contact : c)),
+      }))
+    },
+    [update]
+  )
+
+  const deleteContact = useCallback(
+    (id: number) => {
+      update((prev) => ({
+        ...prev,
+        contacts: (prev.contacts ?? []).filter((c) => c.id !== id),
+      }))
+    },
+    [update]
+  )
+
+  const removeFromVecka = useCallback(
+    (kundName: string, from: keyof Veckoschema) => {
+      update((prev) => {
+        const sched: Veckoschema = prev.schedule ?? { ...SCHEMA }
+        return {
+          ...prev,
+          schedule: { ...sched, [from]: sched[from].filter((n) => n !== kundName) },
+        }
+      })
+    },
+    [update]
+  )
+
   const importLeads = useCallback(
     (incoming: Omit<Lead, "id">[]): number => {
       let imported = 0
@@ -276,7 +331,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DBContext.Provider
-      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads }}
+      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads, addContact, updateContact, deleteContact, removeFromVecka }}
     >
       {children}
     </DBContext.Provider>

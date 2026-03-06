@@ -103,6 +103,16 @@ export interface Lead {
   createdAt: string
 }
 
+export type KontaktTyp = "booking" | "sms" | "quarterly"
+
+export interface KontaktPost {
+  id: number
+  name: string
+  day: string
+  note: string
+  typ: KontaktTyp
+}
+
 export interface DB {
   clients: Kund[]
   obState: OnboardingTillstand
@@ -111,6 +121,8 @@ export interface DB {
   nextId: number
   leads: Lead[]
   nextLeadId: number
+  contacts: KontaktPost[]
+  nextContactId: number
 }
 
 export const TEAM_FARGER: Record<string, string> = {
