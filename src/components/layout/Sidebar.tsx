@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./ThemeToggle"
 import { useAuth } from "@/components/providers/AuthProvider"
+import { useDB } from "@/lib/store"
 import { TEAM_FARGER } from "@/lib/types"
 
 const EKONOMI_USERS = ["Emanuel", "Philip", "Jakob"]
@@ -38,12 +39,13 @@ const TEAM = [
   "Emanuel",
 ]
 
-function NavLink({ href, label, icon: Icon, indent, active }: {
+function NavLink({ href, label, icon: Icon, indent, active, badge }: {
   href: string
   label: string
   icon: React.ElementType
   indent?: boolean
   active: boolean
+  badge?: number
 }) {
   return (
     <Link
@@ -57,7 +59,15 @@ function NavLink({ href, label, icon: Icon, indent, active }: {
       )}
     >
       <Icon className="h-4 w-4 shrink-0" />
-      {label}
+      <span className="flex-1">{label}</span>
+      {badge != null && badge > 0 && (
+        <span className={cn(
+          "text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none min-w-[18px] text-center",
+          active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary text-primary-foreground"
+        )}>
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </Link>
   )
 }
@@ -79,10 +89,17 @@ export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuth()
+  const { db } = useDB()
   const [teamOpen, setTeamOpen] = useState(true)
 
   const showLeads = pathname.startsWith("/kunder") || pathname === "/leads"
   const showContentFlow = pathname.startsWith("/content") || pathname.startsWith("/editor-pipeline")
+
+  function unreadFor(page: string): number {
+    if (!user) return 0
+    const lastRead = db.notifReadAt?.[user.name]?.[page] ?? "1970-01-01"
+    return (db.notifications ?? []).filter((n) => n.page === page && n.createdAt > lastRead).length
+  }
 
   function handleLogout() {
     logout()
@@ -108,11 +125,11 @@ export function Sidebar() {
         <NavLink href="/kunder"     label="Kunder"          icon={Users}           active={pathname === "/kunder"} />
         <SubNav show={showLeads}>
           <div className="pb-0.5">
-            <NavLink href="/leads"  label="Leads"           icon={UserPlus}        active={pathname === "/leads"} indent />
+            <NavLink href="/leads"  label="Leads"           icon={UserPlus}        active={pathname === "/leads"} indent badge={unreadFor("leads")} />
           </div>
         </SubNav>
-        <NavLink href="/onboarding" label="Onboarding"      icon={CheckSquare}     active={pathname === "/onboarding"} />
-        <NavLink href="/tasks"      label="Tasks"           icon={ClipboardList}   active={pathname === "/tasks"} />
+        <NavLink href="/onboarding" label="Onboarding"      icon={CheckSquare}     active={pathname === "/onboarding"} badge={unreadFor("onboarding")} />
+        <NavLink href="/tasks"      label="Tasks"           icon={ClipboardList}   active={pathname === "/tasks"}      badge={unreadFor("tasks")} />
         <NavLink href="/veckoplanering" label="Veckoplanering" icon={Calendar}     active={pathname === "/veckoplanering"} />
         <NavLink href="/kundkontakt" label="Kundkontakt"    icon={PhoneCall}       active={pathname === "/kundkontakt"} />
         <NavLink href="/sms-mallar" label="SMS-mallar"      icon={MessageSquare}   active={pathname === "/sms-mallar"} />

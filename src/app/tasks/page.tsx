@@ -6,6 +6,7 @@ import { useTask } from "@/components/providers/TaskProvider"
 import { newTaskId, STATUS_LABELS, STATUS_COLORS } from "@/lib/task-types"
 import type { Task, TaskStatus, TaskPriority } from "@/lib/task-types"
 import { TEAM_MEDLEMMAR, TEAM_FARGER } from "@/lib/types"
+import { useAuth } from "@/components/providers/AuthProvider"
 import { cn } from "@/lib/utils"
 import {
   Plus, ChevronDown, ChevronRight, MoreHorizontal, Check,
@@ -453,8 +454,14 @@ function EmployeeGroup({ name, tasks, clients, onStatusChange, onEdit, onDuplica
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
-  const { db } = useDB()
+  const { db, addNotification, markPageRead } = useDB()
+  const { user } = useAuth()
   const { tasks, setTasks } = useTask()
+
+  useEffect(() => {
+    if (user?.name) markPageRead("tasks", user.name)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [view, setView] = useState<View>("all_tasks")
   const [search, setSearch] = useState("")
   const [dateFilter, setDateFilter] = useState<DateFilter>("all")
@@ -508,7 +515,17 @@ export default function TasksPage() {
   }
 
   function handleStatusChange(id: number, status: TaskStatus) {
+    const task = tasks.find(t => t.id === id)
     persist(tasks.map(t => t.id === id ? { ...t, status } : t))
+    if (status === "done" && task && task.status !== "done" && user?.name) {
+      addNotification({
+        title: `${user.name} slutförde en uppgift`,
+        body: task.title,
+        page: "tasks",
+        createdBy: user.name,
+        createdAt: new Date().toISOString(),
+      })
+    }
   }
 
   function handleDuplicate(t: Task) {

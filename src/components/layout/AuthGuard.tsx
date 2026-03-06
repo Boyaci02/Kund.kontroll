@@ -3,6 +3,7 @@
 import { useAuth } from "@/components/providers/AuthProvider"
 import { Sidebar } from "./Sidebar"
 import { Topbar } from "./Topbar"
+import { NotificationPanel } from "@/components/ui/NotificationPanel"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect } from "react"
 
@@ -39,6 +40,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <NotificationPanel />
     </div>
   )
 }

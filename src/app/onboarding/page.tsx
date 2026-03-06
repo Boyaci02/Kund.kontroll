@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useDB } from "@/lib/store"
+import { useAuth } from "@/components/providers/AuthProvider"
 import { useRouter } from "next/navigation"
 import { OB_STEG } from "@/lib/data"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -19,9 +20,15 @@ type Tab = "pågående" | "klara"
 const TOTAL_TASKS = OB_STEG.reduce((acc, s) => acc + s.tasks.length, 0)
 
 export default function OnboardingPage() {
-  const { db, toggleTask, resetObState } = useDB()
+  const { db, toggleTask, resetObState, addNotification, markPageRead } = useDB()
+  const { user } = useAuth()
   const router = useRouter()
   const [tab, setTab] = useState<Tab>("pågående")
+
+  useEffect(() => {
+    if (user?.name) markPageRead("onboarding", user.name)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [search, setSearch] = useState("")
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
@@ -60,6 +67,13 @@ export default function OnboardingPage() {
         description: "Kom ihåg att schemalägga kunden i veckoplanering.",
         action: { label: "Gå till schema", onClick: () => router.push("/veckoplanering") },
         duration: 6000,
+      })
+      addNotification({
+        title: `${kundName} har slutfört onboarding`,
+        body: "Redo att schemaläggas i veckoplanering",
+        page: "onboarding",
+        createdBy: user?.name ?? "Okänd",
+        createdAt: new Date().toISOString(),
       })
     }
   }

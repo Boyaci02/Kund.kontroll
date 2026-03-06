@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useDB } from "@/lib/store"
 import { useTask } from "@/components/providers/TaskProvider"
+import { useAuth } from "@/components/providers/AuthProvider"
 import type { Lead, LeadStatus, Paket } from "@/lib/types"
 import { PAKET_LISTA } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -389,9 +390,15 @@ function KanbanColumn({ status, leads, isDragOver, onDragOver, onDragLeave, onDr
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LeadsPage() {
-  const { db, addKund, addLead, updateLead, deleteLead, importLeads } = useDB()
+  const { db, addKund, addLead, updateLead, deleteLead, importLeads, addNotification, markPageRead } = useDB()
   const { addTask } = useTask()
+  const { user } = useAuth()
   const leads = db.leads ?? []
+
+  useEffect(() => {
+    if (user?.name) markPageRead("leads", user.name)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [dragOver, setDragOver] = useState<LeadStatus | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -421,6 +428,15 @@ export default function LeadsPage() {
       setConverting(lead)
     } else {
       updateLead({ ...lead, status: toStatus })
+      if (user?.name) {
+        addNotification({
+          title: `${user.name} uppdaterade en lead`,
+          body: `${lead.name} → ${toStatus}`,
+          page: "leads",
+          createdBy: user.name,
+          createdAt: new Date().toISOString(),
+        })
+      }
     }
     setDragOver(null)
   }
@@ -449,10 +465,20 @@ export default function LeadsPage() {
     updateLead({ ...converting, status: "Vunnen" })
     setConverting(null)
 
+    if (user?.name) {
+      addNotification({
+        title: `${user.name} lade till ny kund`,
+        body: converting.name,
+        page: "leads",
+        createdBy: user.name,
+        createdAt: new Date().toISOString(),
+      })
+    }
+
     toast.success(`${converting.name} tillagd som kund!`, {
       description: "2 uppgifter skapade i Tasks för Philip och Jakob.",
     })
-  }, [converting, db.nextId, addKund, addTask, updateLead])
+  }, [converting, db.nextId, addKund, addTask, updateLead, addNotification, user])
 
   const handleNotionImport = useCallback(async () => {
     setImporting(true)

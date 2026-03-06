@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import { DBContext, loadDB, saveDB, getInitialDB } from "@/lib/store"
-import type { DB, Kund, KontaktPost, KontaktTyp, Lead, Veckoschema } from "@/lib/types"
+import type { AppNotification, DB, Kund, KontaktPost, KontaktTyp, Lead, Veckoschema } from "@/lib/types"
 import { SCHEMA, KONTAKTER } from "@/lib/data"
 import { supabase } from "@/lib/supabase"
 
@@ -309,6 +309,37 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
     [update]
   )
 
+  const addNotification = useCallback(
+    (n: Omit<AppNotification, "id">) => {
+      update((prev) => {
+        const notifs = [...(prev.notifications ?? []), { ...n, id: prev.nextNotifId ?? 1 }]
+        return {
+          ...prev,
+          notifications: notifs.slice(-100),
+          nextNotifId: (prev.nextNotifId ?? 1) + 1,
+        }
+      })
+    },
+    [update]
+  )
+
+  const markPageRead = useCallback(
+    (page: string, userName: string) => {
+      const now = new Date().toISOString()
+      update((prev) => ({
+        ...prev,
+        notifReadAt: {
+          ...(prev.notifReadAt ?? {}),
+          [userName]: {
+            ...((prev.notifReadAt ?? {})[userName] ?? {}),
+            [page]: now,
+          },
+        },
+      }))
+    },
+    [update]
+  )
+
   const importLeads = useCallback(
     (incoming: Omit<Lead, "id">[]): number => {
       let imported = 0
@@ -331,7 +362,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DBContext.Provider
-      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads, addContact, updateContact, deleteContact, removeFromVecka }}
+      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads, addContact, updateContact, deleteContact, removeFromVecka, addNotification, markPageRead }}
     >
       {children}
     </DBContext.Provider>
