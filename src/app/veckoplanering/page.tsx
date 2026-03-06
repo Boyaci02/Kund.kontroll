@@ -17,7 +17,7 @@ const VECKOR: Array<{ key: keyof Veckoschema; label: string }> = [
 ]
 
 export default function VeckoPlaneringPage() {
-  const { db, moveToVecka } = useDB()
+  const { db, moveToVecka, removeFromVecka } = useDB()
   const [dragOver, setDragOver] = useState<keyof Veckoschema | "unscheduled" | null>(null)
 
   const schedule = useMemo(() => db.schedule ?? { ...SCHEMA }, [db.schedule])
@@ -38,6 +38,14 @@ export default function VeckoPlaneringPage() {
     const name = e.dataTransfer.getData("kundName")
     const from = e.dataTransfer.getData("fromVecka") as keyof Veckoschema | ""
     if (name) moveToVecka(name, from || null, to)
+    setDragOver(null)
+  }
+
+  function onDropUnscheduled(e: React.DragEvent) {
+    e.preventDefault()
+    const name = e.dataTransfer.getData("kundName")
+    const from = e.dataTransfer.getData("fromVecka") as keyof Veckoschema | ""
+    if (name && from) removeFromVecka(name, from)
     setDragOver(null)
   }
 
@@ -90,14 +98,26 @@ export default function VeckoPlaneringPage() {
         ))}
       </div>
 
-      {/* Unscheduled customers */}
-      {unscheduled.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <div className="px-4 py-3 border-b border-border bg-muted/40 flex items-center gap-2">
-            <span className="text-sm font-semibold text-foreground">Ej schemalagda</span>
-            <span className="text-xs text-muted-foreground">{unscheduled.length} aktiva kunder saknas i schemat</span>
-          </div>
-          <div className="p-3 flex flex-wrap gap-2">
+      {/* Unscheduled customers — also a drop target */}
+      <div
+        className={cn(
+          "rounded-2xl border border-border bg-card overflow-hidden transition-colors",
+          dragOver === "unscheduled" && "border-primary/50 bg-primary/5"
+        )}
+        onDragOver={(e) => { e.preventDefault(); setDragOver("unscheduled") }}
+        onDragLeave={() => setDragOver(null)}
+        onDrop={onDropUnscheduled}
+      >
+        <div className="px-4 py-3 border-b border-border bg-muted/40 flex items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">Ej schemalagda</span>
+          <span className="text-xs text-muted-foreground">
+            {unscheduled.length > 0
+              ? `${unscheduled.length} aktiva kunder saknas i schemat`
+              : dragOver === "unscheduled" ? "Släpp här för att ta bort från schema" : "Alla aktiva kunder är schemalagda"}
+          </span>
+        </div>
+        {(unscheduled.length > 0 || dragOver === "unscheduled") && (
+          <div className="p-3 flex flex-wrap gap-2 min-h-[48px]">
             {unscheduled.map((c) => (
               <div
                 key={c.id}
@@ -114,9 +134,14 @@ export default function VeckoPlaneringPage() {
                 )}
               </div>
             ))}
+            {dragOver === "unscheduled" && (
+              <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-primary/30 px-4 py-1.5">
+                <span className="text-xs text-primary/50">Släpp för att ta bort från schema</span>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

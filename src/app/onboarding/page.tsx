@@ -50,6 +50,20 @@ export default function OnboardingPage() {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
+  function handleToggleTask(kundId: number, taskId: string, kundName: string) {
+    toggleTask(kundId, taskId)
+    const state = db.obState[kundId] ?? {}
+    const newChecked = !state[taskId]
+    const newDone = Object.values({ ...state, [taskId]: newChecked }).filter(Boolean).length
+    if (newDone === TOTAL_TASKS) {
+      toast.success(`${kundName} har slutfört onboarding!`, {
+        description: "Kom ihåg att schemalägga kunden i veckoplanering.",
+        action: { label: "Gå till schema", onClick: () => router.push("/veckoplanering") },
+        duration: 6000,
+      })
+    }
+  }
+
   function handleReset(kundId: number, name: string) {
     resetObState(kundId)
     toast.success(`Onboarding återställd för ${name}`)
@@ -234,7 +248,7 @@ export default function OnboardingPage() {
                                 >
                                   <Checkbox
                                     checked={isDone}
-                                    onCheckedChange={() => toggleTask(kund.id, task.id)}
+                                    onCheckedChange={() => handleToggleTask(kund.id, task.id, kund.name)}
                                     className="mt-0.5 shrink-0"
                                   />
                                   <div className="flex-1 min-w-0">
