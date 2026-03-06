@@ -57,23 +57,29 @@ export default function OnboardingPage() {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
-  function handleToggleTask(kundId: number, taskId: string, kundName: string) {
+  function handleToggleTask(kundId: number, taskId: string, kundName: string, taskText: string) {
     toggleTask(kundId, taskId)
     const state = db.obState[kundId] ?? {}
     const newChecked = !state[taskId]
     const newDone = Object.values({ ...state, [taskId]: newChecked }).filter(Boolean).length
+
+    if (user?.name) {
+      addNotification({
+        title: newChecked
+          ? `${user.name} kryssade av en OB-uppgift`
+          : `${user.name} avkryssade en OB-uppgift`,
+        body: `${kundName} — ${taskText}`,
+        page: "onboarding",
+        createdBy: user.name,
+        createdAt: new Date().toISOString(),
+      })
+    }
+
     if (newDone === TOTAL_TASKS) {
       toast.success(`${kundName} har slutfört onboarding!`, {
         description: "Kom ihåg att schemalägga kunden i veckoplanering.",
         action: { label: "Gå till schema", onClick: () => router.push("/veckoplanering") },
         duration: 6000,
-      })
-      addNotification({
-        title: `${kundName} har slutfört onboarding`,
-        body: "Redo att schemaläggas i veckoplanering",
-        page: "onboarding",
-        createdBy: user?.name ?? "Okänd",
-        createdAt: new Date().toISOString(),
       })
     }
   }
@@ -262,7 +268,7 @@ export default function OnboardingPage() {
                                 >
                                   <Checkbox
                                     checked={isDone}
-                                    onCheckedChange={() => handleToggleTask(kund.id, task.id, kund.name)}
+                                    onCheckedChange={() => handleToggleTask(kund.id, task.id, kund.name, task.text)}
                                     className="mt-0.5 shrink-0"
                                   />
                                   <div className="flex-1 min-w-0">

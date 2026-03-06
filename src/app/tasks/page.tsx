@@ -508,7 +508,17 @@ export default function TasksPage() {
 
   function handleSave(form: Omit<Task, "id" | "createdAt">) {
     if (editingTask?.id) {
+      const existing = tasks.find(t => t.id === editingTask.id)
       persist(tasks.map(t => t.id === editingTask.id ? { ...t, ...form } : t))
+      if (form.status === "done" && existing && existing.status !== "done" && user?.name) {
+        addNotification({
+          title: `${user.name} slutförde en uppgift`,
+          body: form.title,
+          page: "tasks",
+          createdBy: user.name,
+          createdAt: new Date().toISOString(),
+        })
+      }
     } else {
       persist([...tasks, { ...form, id: newTaskId(), createdAt: new Date().toISOString() }])
     }
