@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import { DBContext, loadDB, saveDB, getInitialDB } from "@/lib/store"
-import type { DB, Kund, Veckoschema } from "@/lib/types"
+import type { DB, Kund, Lead, Veckoschema } from "@/lib/types"
 import { SCHEMA } from "@/lib/data"
 import { supabase } from "@/lib/supabase"
 
@@ -223,9 +223,60 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
     [update]
   )
 
+  const addLead = useCallback(
+    (lead: Omit<Lead, "id">) => {
+      update((prev) => ({
+        ...prev,
+        leads: [...(prev.leads ?? []), { ...lead, id: prev.nextLeadId ?? 1 }],
+        nextLeadId: (prev.nextLeadId ?? 1) + 1,
+      }))
+    },
+    [update]
+  )
+
+  const updateLead = useCallback(
+    (lead: Lead) => {
+      update((prev) => ({
+        ...prev,
+        leads: (prev.leads ?? []).map((l) => (l.id === lead.id ? lead : l)),
+      }))
+    },
+    [update]
+  )
+
+  const deleteLead = useCallback(
+    (id: number) => {
+      update((prev) => ({
+        ...prev,
+        leads: (prev.leads ?? []).filter((l) => l.id !== id),
+      }))
+    },
+    [update]
+  )
+
+  const importLeads = useCallback(
+    (incoming: Omit<Lead, "id">[]): number => {
+      let imported = 0
+      update((prev) => {
+        const existing = new Set((prev.leads ?? []).map((l) => l.name.toLowerCase()))
+        const toAdd = incoming.filter((l) => !existing.has(l.name.toLowerCase()))
+        imported = toAdd.length
+        let nextId = prev.nextLeadId ?? 1
+        const newLeads = toAdd.map((l) => ({ ...l, id: nextId++ }))
+        return {
+          ...prev,
+          leads: [...(prev.leads ?? []), ...newLeads],
+          nextLeadId: nextId,
+        }
+      })
+      return imported
+    },
+    [update]
+  )
+
   return (
     <DBContext.Provider
-      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData }}
+      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads }}
     >
       {children}
     </DBContext.Provider>

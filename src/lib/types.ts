@@ -85,12 +85,32 @@ export interface SMSMall {
   text: string
 }
 
+export type LeadStatus =
+  | "Ny lead"
+  | "Kontaktad"
+  | "Möte bokat"
+  | "Offert skickad"
+  | "Vunnen"
+  | "Förlorad"
+
+export interface Lead {
+  id: number
+  name: string
+  status: LeadStatus
+  email: string
+  phone: string
+  notes: string
+  createdAt: string
+}
+
 export interface DB {
   clients: Kund[]
   obState: OnboardingTillstand
   contactLog: Record<string, "contacted" | "confirmed">
   schedule: Veckoschema | null
   nextId: number
+  leads: Lead[]
+  nextLeadId: number
 }
 
 export const TEAM_FARGER: Record<string, string> = {

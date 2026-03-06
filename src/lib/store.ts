@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext } from "react"
-import type { DB, Kund, OnboardingTillstand, Veckoschema } from "./types"
+import type { DB, Kund, Lead, OnboardingTillstand, Veckoschema } from "./types"
 import { INIT_KUNDER } from "./data"
 
 export const DB_KEY = "kkv4"
@@ -13,6 +13,8 @@ export function getInitialDB(): DB {
     contactLog: {},
     schedule: null,
     nextId: 38,
+    leads: [],
+    nextLeadId: 1,
   }
 }
 
@@ -43,6 +45,10 @@ export interface DBContextValue {
   moveToVecka: (kundName: string, from: keyof Veckoschema | null, to: keyof Veckoschema) => void
   exportData: () => void
   importData: (json: string) => void
+  addLead: (lead: Omit<Lead, "id">) => void
+  updateLead: (lead: Lead) => void
+  deleteLead: (id: number) => void
+  importLeads: (leads: Omit<Lead, "id">[]) => number
 }
 
 export const DBContext = createContext<DBContextValue | null>(null)
