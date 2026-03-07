@@ -680,7 +680,7 @@ export default function TasksPage() {
   // ── Filtering + sorting ───────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
-    let result = [...tasks, ...obVirtualTasks]
+    let result = [...tasks, ...obVirtualTasks.filter(t => t.status !== "done")]
 
     if (view === "all_clients") result = result.filter(t => t.kundId !== null)
 
