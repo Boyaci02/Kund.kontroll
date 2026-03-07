@@ -15,6 +15,15 @@ export const metadata: Metadata = {
   title: "Kunder Kontroll | Syns Nu",
   description: "Kundhantering och onboarding för Syns Nu",
   manifest: "/manifest.json",
+  themeColor: "#18181b",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Kunder Kontroll",
+  },
+  icons: {
+    apple: "/icon-192.png",
+  },
 }
 
 export default function RootLayout({
