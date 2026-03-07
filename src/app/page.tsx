@@ -5,7 +5,6 @@ import { useDB } from "@/lib/store"
 import { useAuth } from "@/components/providers/AuthProvider"
 import { useGoogleCalendar, type NewCalendarEvent } from "@/hooks/useGoogleCalendar"
 import { OB_STEG } from "@/lib/data"
-import { TEAM_FARGER } from "@/lib/types"
 import { CalendarGrid } from "@/components/ui/CalendarGrid"
 import {
   Users,
@@ -15,6 +14,9 @@ import {
   CalendarClock,
   ArrowRight,
   Film,
+  ClipboardList,
+  CheckSquare,
+  PhoneCall,
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -23,6 +25,24 @@ import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import type { Kund } from "@/lib/types"
+
+function getGreeting(): string {
+  const h = new Date().getHours()
+  if (h < 5) return "God natt"
+  if (h < 10) return "God morgon"
+  if (h < 12) return "God förmiddag"
+  if (h < 18) return "God eftermiddag"
+  return "God kväll"
+}
+
+function formatDate(): string {
+  return new Date().toLocaleDateString("sv-SE", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+}
 
 function StatPill({
   icon: Icon,
@@ -36,11 +56,43 @@ function StatPill({
   color?: string
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3">
-      <Icon className={cn("h-4 w-4 shrink-0", color ?? "text-muted-foreground")} />
-      <span className={cn("text-lg font-bold", color ?? "text-foreground")}>{value}</span>
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5">
+      <Icon className={cn("h-3.5 w-3.5 shrink-0", color ?? "text-muted-foreground")} />
+      <span className={cn("text-base font-bold leading-none", color ?? "text-foreground")}>{value}</span>
+      <span className="text-xs text-muted-foreground leading-none">{label}</span>
     </div>
+  )
+}
+
+function ActionCard({
+  href,
+  icon: Icon,
+  label,
+  subtitle,
+  iconColor,
+  iconBg,
+}: {
+  href: string
+  icon: React.ElementType
+  label: string
+  subtitle: string
+  iconColor: string
+  iconBg: string
+}) {
+  return (
+    <Link
+      href={href}
+      className="group rounded-2xl border border-border bg-card p-5 flex flex-col gap-3 hover:shadow-md hover:border-border/80 transition-all duration-200"
+    >
+      <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center", iconBg)}>
+        <Icon className={cn("h-5 w-5", iconColor)} />
+      </div>
+      <div>
+        <p className="text-sm font-semibold text-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+      </div>
+      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 transition-all mt-auto" />
+    </Link>
   )
 }
 
@@ -54,12 +106,10 @@ export default function OversiktPage() {
   const aktiva = clients.filter((c) => c.st === "AKTIV").length
   const inaktiva = clients.filter((c) => c.st === "INAKTIV").length
 
-  // Fetch Google Calendar events for current month on mount
   useEffect(() => {
     fetchEvents(new Date())
   }, [fetchEvents])
 
-  // My incomplete onboarding tasks (for the logged-in user)
   const myTasks = useMemo(() => {
     if (!user) return []
     const result: Array<{
@@ -129,10 +179,20 @@ export default function OversiktPage() {
     [fetchEvents]
   )
 
+  const greeting = user ? `${getGreeting()}, ${user.name}!` : getGreeting()
+  const date = formatDate()
+
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-8 space-y-6 max-w-6xl">
+
+      {/* Greeting */}
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{greeting}</h1>
+        <p className="text-sm text-muted-foreground mt-1 capitalize">{date}</p>
+      </div>
+
       {/* Stat pills */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2">
         <StatPill icon={Users} value={clients.length} label="Totalt" />
         <StatPill
           icon={UserCheck}
@@ -157,6 +217,42 @@ export default function OversiktPage() {
           value={myInspelningar}
           label="Mina inspelningar"
           color="text-amber-500"
+        />
+      </div>
+
+      {/* Action cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <ActionCard
+          href="/tasks"
+          icon={ClipboardList}
+          label="Tasks"
+          subtitle="Hantera uppgifter"
+          iconColor="text-primary"
+          iconBg="bg-primary/10"
+        />
+        <ActionCard
+          href="/kunder"
+          icon={Users}
+          label="Kunder"
+          subtitle={`${aktiva} aktiva kunder`}
+          iconColor="text-blue-600 dark:text-blue-400"
+          iconBg="bg-blue-100 dark:bg-blue-900/30"
+        />
+        <ActionCard
+          href="/onboarding"
+          icon={CheckSquare}
+          label="Onboarding"
+          subtitle="Onboarding-steg"
+          iconColor="text-green-600 dark:text-green-400"
+          iconBg="bg-green-100 dark:bg-green-900/30"
+        />
+        <ActionCard
+          href="/kundkontakt"
+          icon={PhoneCall}
+          label="Kundkontakt"
+          subtitle="Bokningar & SMS"
+          iconColor="text-amber-600 dark:text-amber-400"
+          iconBg="bg-amber-100 dark:bg-amber-900/30"
         />
       </div>
 

@@ -12,7 +12,7 @@ export function getInitialDB(): DB {
     obState: {},
     contactLog: {},
     schedule: null,
-    nextId: 38,
+    nextId: 39,
     leads: [],
     nextLeadId: 1,
     contacts: [],

@@ -40,6 +40,15 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         current = { ...current, contacts: seeded, nextContactId: id }
       }
 
+      // Migration: inject "Syns Nu" internal client for existing users
+      if (!current.clients.some(c => c.name === "Syns Nu")) {
+        current = {
+          ...current,
+          clients: [...current.clients, { id: 38, name: "Syns Nu", pkg: "", vg: "", ed: "", cc: "", lr: "", nr: "", ns: "", adr: "", cnt: "Internt", ph: "", em: "", st: "AKTIV", notes: "Internt företag" }],
+          nextId: Math.max(current.nextId, 39),
+        }
+      }
+
       setDB(current)
       dbRef.current = current
       saveDB(current)

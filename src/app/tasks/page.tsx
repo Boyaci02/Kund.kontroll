@@ -36,6 +36,8 @@ interface ActiveFilters {
 
 const STATUS_OPTIONS: TaskStatus[] = ["not_started", "in_progress", "done", "blocked"]
 const OB_STATUS_OPTIONS: TaskStatus[] = ["not_started", "done"]
+const PAGE_SIZE = 25
+const GROUP_SIZE = 10
 
 // ── OB task helpers ────────────────────────────────────────────────────────────
 
@@ -447,6 +449,49 @@ function TaskCard({ task, kundName, onStatusChange, isOB }: {
   )
 }
 
+// ── Mobile employee section (with pagination) ─────────────────────────────────
+
+function MobileEmployeeSection({ name, tasks, clients, onStatusChange, color }: {
+  name: string
+  tasks: Task[]
+  clients: Array<{ id: number; name: string }>
+  onStatusChange: (id: number, s: TaskStatus) => void
+  color?: string
+}) {
+  const [visibleCount, setVisibleCount] = useState(GROUP_SIZE)
+  if (tasks.length === 0) return null
+  return (
+    <div className="md:hidden mb-4">
+      <div className="flex items-center gap-2 mb-2 px-1">
+        {color && (
+          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: color }}>{name[0]}</div>
+        )}
+        <span className="text-sm font-semibold text-foreground">{name}</span>
+        <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{tasks.length}</span>
+      </div>
+      <div className="space-y-2">
+        {tasks.slice(0, visibleCount).map(t => (
+          <TaskCard
+            key={t.id}
+            task={t}
+            kundName={clients.find(c => c.id === t.kundId)?.name ?? ""}
+            onStatusChange={s => onStatusChange(t.id, s)}
+            isOB={t.description.startsWith("__OB__:")}
+          />
+        ))}
+      </div>
+      {tasks.length > visibleCount && (
+        <button
+          onClick={() => setVisibleCount(v => v + GROUP_SIZE)}
+          className="w-full text-xs text-primary hover:text-primary/80 transition-colors py-2 text-center"
+        >
+          Visa fler ({tasks.length - visibleCount} till)
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ── Employee group ────────────────────────────────────────────────────────────
 
 function EmployeeGroup({ name, tasks, clients, onStatusChange, onEdit, onDuplicate, onDelete, onAddTask, sortKey, sortDir, onSort }: {
@@ -463,8 +508,10 @@ function EmployeeGroup({ name, tasks, clients, onStatusChange, onEdit, onDuplica
   onSort: (k: SortKey) => void
 }) {
   const [expanded, setExpanded] = useState(true)
+  const [visibleCount, setVisibleCount] = useState(GROUP_SIZE)
   const color = TEAM_FARGER[name] ?? "#9CA3AF"
   const isUnassigned = name === "Ej tilldelad"
+  const visibleTasks = tasks.slice(0, visibleCount)
 
   return (
     <div className="rounded-xl border border-border overflow-hidden mb-3">
@@ -503,7 +550,7 @@ function EmployeeGroup({ name, tasks, clients, onStatusChange, onEdit, onDuplica
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-xs text-muted-foreground">Inga tasks</td>
                 </tr>
-              ) : tasks.map(t => {
+              ) : visibleTasks.map(t => {
                 const kundName = clients.find(c => c.id === t.kundId)?.name ?? ""
                 const isOB = t.description.startsWith("__OB__:")
                 return (
@@ -522,13 +569,21 @@ function EmployeeGroup({ name, tasks, clients, onStatusChange, onEdit, onDuplica
               })}
             </tbody>
           </table>
-          <div className="border-t border-border/40 px-4 py-2 bg-muted/10">
+          <div className="border-t border-border/40 px-4 py-2 bg-muted/10 flex items-center gap-3">
             <button
               onClick={onAddTask}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg px-2 py-1.5 transition-colors"
             >
               <Plus className="w-3 h-3" /> Ny task
             </button>
+            {tasks.length > visibleCount && (
+              <button
+                onClick={() => setVisibleCount(v => v + GROUP_SIZE)}
+                className="text-xs text-primary hover:text-primary/80 transition-colors px-2 py-1.5"
+              >
+                Visa fler ({tasks.length - visibleCount} till)
+              </button>
+            )}
           </div>
         </>
       )}
@@ -586,6 +641,7 @@ export default function TasksPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [modalOpen, setModalOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Partial<Task> | null>(null)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const filterMenuRef = useRef<HTMLDivElement>(null)
 
   const clients = db.clients.filter(c => c.st === "AKTIV" || c.st === "")
@@ -599,6 +655,11 @@ export default function TasksPage() {
     document.addEventListener("mousedown", h)
     return () => document.removeEventListener("mousedown", h)
   }, [showFilterMenu])
+
+  // Reset visible count when filters or view change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [view, search, activeFilters, dateFilter])
 
   function persist(updated: Task[]) {
     setTasks(updated)
@@ -1042,26 +1103,13 @@ export default function TasksPage() {
                   />
                 </div>
                 {/* Mobile */}
-                {memberTasks.length > 0 && (
-                  <div className="md:hidden mb-4">
-                    <div className="flex items-center gap-2 mb-2 px-1">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: TEAM_FARGER[member] ?? "#9CA3AF" }}>{member[0]}</div>
-                      <span className="text-sm font-semibold text-foreground">{member}</span>
-                      <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{memberTasks.length}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {memberTasks.map(t => (
-                        <TaskCard
-                          key={t.id}
-                          task={t}
-                          kundName={clients.find(c => c.id === t.kundId)?.name ?? ""}
-                          onStatusChange={s => handleStatusChange(t.id, s)}
-                          isOB={t.description.startsWith("__OB__:")}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <MobileEmployeeSection
+                  name={member}
+                  tasks={memberTasks}
+                  clients={clients}
+                  onStatusChange={handleStatusChange}
+                  color={TEAM_FARGER[member] ?? "#9CA3AF"}
+                />
               </div>
             )
           })}
@@ -1082,20 +1130,12 @@ export default function TasksPage() {
                   onSort={handleSort}
                 />
               </div>
-              <div className="md:hidden mb-4">
-                <p className="text-sm font-semibold text-muted-foreground mb-2 px-1">Ej tilldelad</p>
-                <div className="space-y-2">
-                  {unassigned.map(t => (
-                    <TaskCard
-                      key={t.id}
-                      task={t}
-                      kundName={clients.find(c => c.id === t.kundId)?.name ?? ""}
-                      onStatusChange={s => handleStatusChange(t.id, s)}
-                      isOB={t.description.startsWith("__OB__:")}
-                    />
-                  ))}
-                </div>
-              </div>
+              <MobileEmployeeSection
+                name="Ej tilldelad"
+                tasks={unassigned}
+                clients={clients}
+                onStatusChange={handleStatusChange}
+              />
             </>
           )}
         </div>
@@ -1112,7 +1152,7 @@ export default function TasksPage() {
                       {tasks.length === 0 ? "Inga tasks ännu — skapa den första!" : "Inga tasks matchar filtret"}
                     </td>
                   </tr>
-                ) : filtered.map(t => {
+                ) : filtered.slice(0, visibleCount).map(t => {
                   const kundName = clients.find(c => c.id === t.kundId)?.name ?? ""
                   const isOB = t.description.startsWith("__OB__:")
                   return (
@@ -1131,13 +1171,21 @@ export default function TasksPage() {
                 })}
               </tbody>
             </table>
-            <div className="border-t border-border px-4 py-2 bg-muted/10">
+            <div className="border-t border-border px-4 py-2 bg-muted/10 flex items-center gap-3">
               <button
                 onClick={() => openNewTask()}
                 className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg px-2 py-1.5 transition-colors"
               >
                 <Plus className="w-3 h-3" /> Ny task
               </button>
+              {filtered.length > visibleCount && (
+                <button
+                  onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                  className="text-xs text-primary hover:text-primary/80 transition-colors px-2 py-1.5"
+                >
+                  Visa fler ({filtered.length - visibleCount} till)
+                </button>
+              )}
             </div>
           </div>
 
@@ -1147,7 +1195,7 @@ export default function TasksPage() {
               <p className="text-center text-xs text-muted-foreground py-10">
                 {tasks.length === 0 ? "Inga tasks ännu — skapa den första!" : "Inga tasks matchar filtret"}
               </p>
-            ) : filtered.map(t => (
+            ) : filtered.slice(0, visibleCount).map(t => (
               <TaskCard
                 key={t.id}
                 task={t}
@@ -1156,6 +1204,14 @@ export default function TasksPage() {
                 isOB={t.description.startsWith("__OB__:")}
               />
             ))}
+            {filtered.length > visibleCount && (
+              <button
+                onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                className="w-full text-xs text-primary hover:text-primary/80 transition-colors py-3 text-center"
+              >
+                Visa fler ({filtered.length - visibleCount} till)
+              </button>
+            )}
           </div>
         </>
       )}

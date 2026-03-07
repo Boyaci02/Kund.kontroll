@@ -44,6 +44,7 @@ export const INIT_KUNDER: Kund[] = [
   { id: 35, name: "KERCH", pkg: "Lilla Paketet", vg: "Etienne", ed: "Edvin", cc: "Jakob", lr: "", nr: "", ns: "", adr: "", cnt: "", ph: "", em: "", st: "", notes: "" },
   { id: 36, name: "S2", pkg: "Stora Paketet", vg: "Etienne", ed: "Edvin", cc: "Jakob", lr: "", nr: "Avvakta", ns: "", adr: "Mall of Scandinavia, Solna", cnt: "Michel", ph: "manager@k25.nu", em: "", st: "AKTIV", notes: "" },
   { id: 37, name: "AMBA", pkg: "Special Paket", vg: "", ed: "", cc: "", lr: "", nr: "", ns: "", adr: "", cnt: "", ph: "", em: "", st: "", notes: "" },
+  { id: 38, name: "Syns Nu", pkg: "", vg: "", ed: "", cc: "", lr: "", nr: "", ns: "", adr: "", cnt: "Internt", ph: "", em: "", st: "AKTIV", notes: "Internt företag" },
 ]
 
 export const OB_STEG: OnboardingSteg[] = [
