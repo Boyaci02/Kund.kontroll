@@ -6,7 +6,7 @@ import {
   INIT_HEMSIDA_CLIENTS, INIT_HEMSIDA_LEADS, INIT_HEMSIDA_TASKS,
 } from "@/lib/hemsidor-data"
 import type {
-  HemsidaClient, Lead, CrmTask, OnboardingSubmission, TaskRequest, ActivityEntry,
+  HemsidaClient, Lead, CrmTask, OnboardingSubmission, TaskRequest, ActivityEntry, OnboardingQueueEntry,
 } from "@/lib/hemsidor-types"
 
 // ── Consolidated state shape ──────────────────────────────────────────────────
@@ -18,6 +18,7 @@ export interface HemsidorDB {
   activity:    ActivityEntry[]
   submissions: OnboardingSubmission[]
   requests:    TaskRequest[]
+  onboarding:  OnboardingQueueEntry[]
 }
 
 const HEMSIDOR_KEY = "hemsidor-db"
@@ -29,6 +30,7 @@ const INITIAL: HemsidorDB = {
   activity:    [],
   submissions: [],
   requests:    [],
+  onboarding:  [],
 }
 
 // ── Migration: consolidate old crm_* localStorage keys into one object ────────
@@ -45,6 +47,7 @@ function migrateHemsidor(raw: unknown): HemsidorDB {
         activity:    r.activity    ?? [],
         submissions: r.submissions ?? [],
         requests:    r.requests    ?? [],
+        onboarding:  r.onboarding  ?? [],
       }
     }
   }
@@ -69,6 +72,7 @@ function getInitialHemsidor(): HemsidorDB {
       activity:    load("crm_activity",                []),
       submissions: load("crm_onboarding_submissions",  []),
       requests:    load("crm_task_requests",           []),
+      onboarding:  [],
     }
   } catch { return INITIAL }
 }
@@ -88,6 +92,7 @@ interface HemsidorContextValue {
   setActivity:    Setter<ActivityEntry[]>
   setSubmissions: Setter<OnboardingSubmission[]>
   setRequests:    Setter<TaskRequest[]>
+  setOnboarding:  Setter<OnboardingQueueEntry[]>
   addActivity:    (message: string, type?: string) => void
 }
 
@@ -122,8 +127,9 @@ export function HemsidorProvider({ children }: { children: React.ReactNode }) {
   const setLeads       = useCallback((v: Lead[]                 | ((p: Lead[])                 => Lead[]))                 => setDbRaw(p => ({ ...p, leads:       typeof v === "function" ? v(p.leads)       : v })), [setDbRaw])
   const setTasks       = useCallback((v: CrmTask[]              | ((p: CrmTask[])              => CrmTask[]))              => setDbRaw(p => ({ ...p, tasks:       typeof v === "function" ? v(p.tasks)       : v })), [setDbRaw])
   const setActivity    = useCallback((v: ActivityEntry[]        | ((p: ActivityEntry[])        => ActivityEntry[]))        => setDbRaw(p => ({ ...p, activity:    typeof v === "function" ? v(p.activity)    : v })), [setDbRaw])
-  const setSubmissions = useCallback((v: OnboardingSubmission[] | ((p: OnboardingSubmission[]) => OnboardingSubmission[])) => setDbRaw(p => ({ ...p, submissions: typeof v === "function" ? v(p.submissions) : v })), [setDbRaw])
-  const setRequests    = useCallback((v: TaskRequest[]          | ((p: TaskRequest[])          => TaskRequest[]))          => setDbRaw(p => ({ ...p, requests:    typeof v === "function" ? v(p.requests)    : v })), [setDbRaw])
+  const setSubmissions = useCallback((v: OnboardingSubmission[]   | ((p: OnboardingSubmission[])   => OnboardingSubmission[]))   => setDbRaw(p => ({ ...p, submissions: typeof v === "function" ? v(p.submissions) : v })), [setDbRaw])
+  const setRequests    = useCallback((v: TaskRequest[]            | ((p: TaskRequest[])            => TaskRequest[]))            => setDbRaw(p => ({ ...p, requests:    typeof v === "function" ? v(p.requests)    : v })), [setDbRaw])
+  const setOnboarding  = useCallback((v: OnboardingQueueEntry[]   | ((p: OnboardingQueueEntry[])   => OnboardingQueueEntry[]))   => setDbRaw(p => ({ ...p, onboarding:  typeof v === "function" ? v(p.onboarding)  : v })), [setDbRaw])
 
   const addActivity = useCallback(
     (message: string, type = "general") => {
@@ -138,7 +144,7 @@ export function HemsidorProvider({ children }: { children: React.ReactNode }) {
   return (
     <HemsidorContext.Provider value={{
       db, loading, setDb,
-      setClients, setLeads, setTasks, setActivity, setSubmissions, setRequests, addActivity,
+      setClients, setLeads, setTasks, setActivity, setSubmissions, setRequests, setOnboarding, addActivity,
     }}>
       {children}
     </HemsidorContext.Provider>

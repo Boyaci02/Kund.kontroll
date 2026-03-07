@@ -9,6 +9,7 @@ import ClientsTable      from "@/components/hemsidor/ClientsTable"
 import TasksList         from "@/components/hemsidor/TasksList"
 import SubmissionsList   from "@/components/hemsidor/SubmissionsList"
 import RequestsList      from "@/components/hemsidor/RequestsList"
+import OnboardingQueue   from "@/components/hemsidor/OnboardingQueue"
 
 // ─── Tabs definition ──────────────────────────────────────────────────────────
 
@@ -16,6 +17,7 @@ const TABS = [
   { id: "dashboard",   label: "Dashboard" },
   { id: "leads",       label: "Nya kunder" },
   { id: "clients",     label: "Kunder" },
+  { id: "onboarding",  label: "Onboarding" },
   { id: "tasks",       label: "Tasks" },
   { id: "submissions", label: "Onboarding-svar" },
   { id: "requests",    label: "Förfrågningar" },
@@ -26,10 +28,10 @@ const TABS = [
 export default function HemsidorPage() {
   const [tab, setTab] = useState("dashboard")
   const {
-    db, setClients, setLeads, setTasks, setActivity, setSubmissions, setRequests, addActivity,
+    db, setClients, setLeads, setTasks, setActivity, setSubmissions, setRequests, setOnboarding, addActivity,
   } = useHemsidor()
 
-  const { clients, leads, tasks, activity, submissions, requests } = db
+  const { clients, leads, tasks, activity, submissions, requests, onboarding } = db
 
   const showToast = (message: string) => { toast(message) }
 
@@ -44,9 +46,10 @@ export default function HemsidorPage() {
     tasks:       pendingTasks,
     submissions: newSubmissions,
     requests:    newRequests,
+    onboarding:  onboarding.length,
   }
 
-  const sharedProps = { clients, setClients, leads, setLeads, tasks, setTasks, addActivity, showToast, setTab }
+  const sharedProps = { clients, setClients, leads, setLeads, tasks, setTasks, addActivity, showToast, setTab, setOnboarding }
 
   return (
     <div className="p-6 md:p-8 min-h-screen bg-background">
@@ -81,6 +84,7 @@ export default function HemsidorPage() {
       {tab === "dashboard"   && <HemsidorDashboard {...sharedProps} activity={activity} />}
       {tab === "leads"       && <LeadsKanban       {...sharedProps} />}
       {tab === "clients"     && <ClientsTable      {...sharedProps} />}
+      {tab === "onboarding"  && <OnboardingQueue   onboarding={onboarding} setOnboarding={setOnboarding} setTab={setTab} />}
       {tab === "tasks"       && <TasksList         tasks={tasks} setTasks={setTasks} clients={clients} addActivity={addActivity} />}
       {tab === "submissions" && <SubmissionsList   submissions={submissions} clients={clients} setTab={setTab} />}
       {tab === "requests"    && <RequestsList      requests={requests} setRequests={setRequests} clients={clients} setTasks={setTasks} addActivity={addActivity} showToast={showToast} />}

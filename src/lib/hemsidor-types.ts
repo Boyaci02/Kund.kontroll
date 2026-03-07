@@ -104,3 +104,13 @@ export interface ActivityEntry {
   type: string
   date: string
 }
+
+export interface OnboardingQueueEntry {
+  id: number
+  clientId: number
+  name: string
+  plan: string
+  addedAt: string
+  priority: "hog" | "normal" | "lag"
+  order: number
+}

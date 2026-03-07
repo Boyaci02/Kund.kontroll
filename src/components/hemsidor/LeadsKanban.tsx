@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Plus, Pencil, X, MessageSquarePlus, TrendingUp } from "lucide-react"
 import { LEAD_STATUS, LEAD_COLUMNS, LEAD_SOURCES, todayStr, formatSEK } from "@/lib/hemsidor-data"
 import { HModal, HConfirmDialog, HFormField, HFormSelect, HPageHeader } from "./shared"
-import type { Lead, HemsidaClient } from "@/lib/hemsidor-types"
+import type { Lead, HemsidaClient, OnboardingQueueEntry } from "@/lib/hemsidor-types"
 
 const EMPTY_LEAD: Omit<Lead, "id" | "created"> = {
   name: "", contact: "", email: "", phone: "", source: "Hemsida",
@@ -17,11 +17,12 @@ interface Props {
   setLeads: React.Dispatch<React.SetStateAction<Lead[]>>
   clients: HemsidaClient[]
   setClients: React.Dispatch<React.SetStateAction<HemsidaClient[]>>
+  setOnboarding: (v: OnboardingQueueEntry[] | ((p: OnboardingQueueEntry[]) => OnboardingQueueEntry[])) => void
   addActivity: (message: string, type?: string) => void
   showToast: (msg: string) => void
 }
 
-export default function LeadsKanban({ leads, setLeads, clients, setClients, addActivity, showToast }: Props) {
+export default function LeadsKanban({ leads, setLeads, clients, setClients, setOnboarding, addActivity, showToast }: Props) {
   const [showModal,    setShowModal]    = useState(false)
   const [editLead,     setEditLead]     = useState<number | null>(null)
   const [lostModal,    setLostModal]    = useState<number | null>(null)
@@ -77,9 +78,18 @@ export default function LeadsKanban({ leads, setLeads, clients, setClients, addA
       monthlyFee: 0, startDate: todayStr(), renewalDate: "", notes: "",
     }
     setClients(prev => [...prev, newClient])
+    setOnboarding(prev => [...prev, {
+      id: Date.now() + 1,
+      clientId: newClient.id,
+      name: lead.name,
+      plan: "Standard",
+      addedAt: todayStr(),
+      priority: "normal",
+      order: prev.length,
+    }])
     setLeads(prev => prev.filter(l => l.id !== lead.id))
     addActivity(`Lead konverterad till kund: ${lead.name}`, "client")
-    showToast(`${lead.name} är nu tillagd som kund!`)
+    showToast(`${lead.name} är nu tillagd som kund och onboarding!`)
   }
 
   const addNote = () => {
