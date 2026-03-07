@@ -696,6 +696,20 @@ export default function TasksPage() {
       }
     } else {
       persist([...tasks, { ...form, id: newTaskId(), createdAt: new Date().toISOString() }])
+      // Push-notis till den tilldelade kollegorn (inte till dig själv)
+      if (form.assignee && form.assignee !== "Ingen" && form.assignee !== user?.name) {
+        const kundName = form.kundId ? clients.find(c => c.id === form.kundId)?.name : null
+        fetch("/api/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            teamMember: form.assignee,
+            title: `Ny uppgift: ${form.title}`,
+            body: kundName ? `Kund: ${kundName}` : "",
+            url: "/tasks",
+          }),
+        }).catch(() => {})
+      }
     }
   }
 

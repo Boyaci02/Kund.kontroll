@@ -14,6 +14,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 export const metadata: Metadata = {
   title: "Kunder Kontroll | Syns Nu",
   description: "Kundhantering och onboarding för Syns Nu",
+  manifest: "/manifest.json",
 }
 
 export default function RootLayout({

@@ -464,6 +464,22 @@ export default function LeadsPage() {
 
     enrollInOnboarding(newKundId, converting.name, pkg || "")
 
+    // Push-notis till Philip och Jakob (auto-uppgifterna)
+    ;["Philip", "Jakob"].forEach((member) => {
+      if (member !== user?.name) {
+        fetch("/api/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            teamMember: member,
+            title: `Ny kund: ${converting.name}`,
+            body: "Du har fått en ny uppgift i Tasks.",
+            url: "/tasks",
+          }),
+        }).catch(() => {})
+      }
+    })
+
     updateLead({ ...converting, status: "Vunnen" })
     setConverting(null)
 

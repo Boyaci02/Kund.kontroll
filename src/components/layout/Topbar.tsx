@@ -7,6 +7,7 @@ import { useAuth } from "@/components/providers/AuthProvider"
 import { TEAM_FARGER } from "@/lib/types"
 import { Search } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { PushNotificationSetup } from "@/components/PushNotificationSetup"
 
 function getGreeting(): string {
   const h = new Date().getHours()
@@ -117,9 +118,10 @@ export function Topbar({
         )}
       </div>
 
-      {/* Right: User avatar */}
+      {/* Right: Push notiser + User avatar */}
       {user && (
         <div className="flex items-center gap-2 shrink-0">
+          <PushNotificationSetup />
           <button
             onClick={onAvatarClick}
             className="relative h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 focus:outline-none"
