@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import { DBContext, loadDB, saveDB, getInitialDB } from "@/lib/store"
-import type { AppNotification, DB, Kund, KontaktPost, KontaktTyp, Lead, Veckoschema } from "@/lib/types"
+import type { AppNotification, DB, Kund, KontaktPost, KontaktTyp, Lead, ObEnrollment, Veckoschema } from "@/lib/types"
 import { SCHEMA, KONTAKTER } from "@/lib/data"
 import { supabase } from "@/lib/supabase"
 
@@ -38,6 +38,11 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
           ...KONTAKTER.quarterly.map((k) => ({ ...k, id: id++, typ: "quarterly" as KontaktTyp })),
         ]
         current = { ...current, contacts: seeded, nextContactId: id }
+      }
+
+      // Migration: ensure obEnrollments exists for existing users
+      if (!current.obEnrollments) {
+        current = { ...current, obEnrollments: [] }
       }
 
       // Migration: inject "Syns Nu" internal client for existing users
@@ -332,6 +337,43 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
     [update]
   )
 
+  const enrollInOnboarding = useCallback(
+    (kundId: number, name: string, pkg: string) => {
+      update((prev) => {
+        const enrollments = prev.obEnrollments ?? []
+        if (enrollments.some((e) => e.kundId === kundId)) return prev
+        const entry: ObEnrollment = {
+          id: Date.now(),
+          kundId,
+          name,
+          pkg,
+          addedAt: new Date().toLocaleDateString("sv-SE"),
+          priority: "normal",
+          order: enrollments.length,
+        }
+        return { ...prev, obEnrollments: [...enrollments, entry] }
+      })
+    },
+    [update]
+  )
+
+  const removeFromOnboarding = useCallback(
+    (id: number) => {
+      update((prev) => ({
+        ...prev,
+        obEnrollments: (prev.obEnrollments ?? []).filter((e) => e.id !== id),
+      }))
+    },
+    [update]
+  )
+
+  const updateObEnrollments = useCallback(
+    (enrollments: ObEnrollment[]) => {
+      update((prev) => ({ ...prev, obEnrollments: enrollments }))
+    },
+    [update]
+  )
+
   const markPageRead = useCallback(
     (page: string, userName: string) => {
       const now = new Date().toISOString()
@@ -371,7 +413,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DBContext.Provider
-      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads, addContact, updateContact, deleteContact, removeFromVecka, addNotification, markPageRead }}
+      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads, addContact, updateContact, deleteContact, removeFromVecka, addNotification, markPageRead, enrollInOnboarding, removeFromOnboarding, updateObEnrollments }}
     >
       {children}
     </DBContext.Provider>

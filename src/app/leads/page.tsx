@@ -390,7 +390,7 @@ function KanbanColumn({ status, leads, isDragOver, onDragOver, onDragLeave, onDr
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LeadsPage() {
-  const { db, addKund, addLead, updateLead, deleteLead, importLeads, addNotification, markPageRead } = useDB()
+  const { db, addKund, addLead, updateLead, deleteLead, importLeads, addNotification, markPageRead, enrollInOnboarding } = useDB()
   const { addTask } = useTask()
   const { user } = useAuth()
   const leads = db.leads ?? []
@@ -462,6 +462,8 @@ export default function LeadsPage() {
     addTask({ title: `Välj videograf och redigerare för ${converting.name}`, assignee: "Philip", kundId: newKundId, status: "not_started", startDate: today, endDate: in7Days })
     addTask({ title: `Tilldela content creator till ${converting.name}`, assignee: "Jakob", kundId: newKundId, status: "not_started", startDate: today, endDate: in7Days })
 
+    enrollInOnboarding(newKundId, converting.name, pkg || "")
+
     updateLead({ ...converting, status: "Vunnen" })
     setConverting(null)
 
@@ -475,10 +477,10 @@ export default function LeadsPage() {
       })
     }
 
-    toast.success(`${converting.name} tillagd som kund!`, {
+    toast.success(`${converting.name} tillagd som kund och onboarding!`, {
       description: "2 uppgifter skapade i Tasks för Philip och Jakob.",
     })
-  }, [converting, db.nextId, addKund, addTask, updateLead, addNotification, user])
+  }, [converting, db.nextId, addKund, addTask, updateLead, addNotification, enrollInOnboarding, user])
 
   const handleNotionImport = useCallback(async () => {
     setImporting(true)

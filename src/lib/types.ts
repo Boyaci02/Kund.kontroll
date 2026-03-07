@@ -113,6 +113,16 @@ export interface KontaktPost {
   typ: KontaktTyp
 }
 
+export interface ObEnrollment {
+  id: number
+  kundId: number
+  name: string
+  pkg: string
+  addedAt: string
+  priority: "hog" | "normal" | "lag"
+  order: number
+}
+
 export type NotifPage = "tasks" | "leads" | "onboarding"
 
 export interface AppNotification {
@@ -137,6 +147,7 @@ export interface DB {
   notifications: AppNotification[]
   nextNotifId: number
   notifReadAt: Record<string, Record<string, string>>
+  obEnrollments: ObEnrollment[]
 }
 
 export const TEAM_FARGER: Record<string, string> = {
