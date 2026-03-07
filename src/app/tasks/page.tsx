@@ -12,7 +12,7 @@ import { OB_STEG } from "@/lib/data"
 import { cn } from "@/lib/utils"
 import {
   Plus, ChevronDown, ChevronRight, MoreHorizontal, Check,
-  X, Filter, Users, Globe, List, Search, CheckSquare,
+  X, Filter, Users, Globe, List, Search, CheckSquare, Download, Upload,
 } from "lucide-react"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -677,6 +677,34 @@ export default function TasksPage() {
     setActiveFilters(f => ({ ...f, [type]: (f[type] as (string | number)[]).filter(v => v !== value) }))
   }
 
+  function handleExport() {
+    const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `tasks-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const imported = JSON.parse(ev.target?.result as string) as Task[]
+        if (!Array.isArray(imported)) { alert("Ogiltigt format — filen måste vara en JSON-array."); return }
+        if (!confirm(`Importera ${imported.length} tasks? Befintliga tasks behålls, dubbletter hoppas över.`)) return
+        const existingIds = new Set(tasks.map(t => t.id))
+        const newTasks = imported.filter(t => !existingIds.has(t.id))
+        persist([...tasks, ...newTasks])
+      } catch { alert("Kunde inte läsa filen.") }
+    }
+    reader.readAsText(file)
+    e.target.value = ""
+  }
+
   // ── Filtering + sorting ───────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
@@ -755,10 +783,26 @@ export default function TasksPage() {
           <h1 className="text-xl font-bold text-foreground">Tasks</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Manage team tasks and client work</p>
         </div>
-        <Button size="sm" onClick={() => openNewTask()} className="gap-1.5">
-          <Plus className="w-3.5 h-3.5" />
-          Ny task
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            title="Exportera tasks (backup)"
+            className="h-8 w-8 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <label
+            title="Importera tasks från backup"
+            className="h-8 w-8 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <input type="file" accept=".json" className="sr-only" onChange={handleImport} />
+          </label>
+          <Button size="sm" onClick={() => openNewTask()} className="gap-1.5">
+            <Plus className="w-3.5 h-3.5" />
+            Ny task
+          </Button>
+        </div>
       </div>
 
       {/* Toolbar */}
