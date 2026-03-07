@@ -80,6 +80,9 @@ export default function OnboardingPage() {
     if (draft) setHasDraft(true)
   }, [])
 
+  // suppress unused warning
+  void db
+
   const set = (field: keyof FormData, value: unknown) => setForm(prev => ({ ...prev, [field]: value }))
 
   const saveDraft = () => {
@@ -148,17 +151,17 @@ export default function OnboardingPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-10 text-center">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="bg-card rounded-3xl shadow-xl w-full max-w-md p-10 text-center border border-border">
           <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
             <CheckCircle className="w-8 h-8 text-emerald-600" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Tack{form.name ? `, ${form.name}` : ""}!</h2>
-          <p className="text-slate-500 text-sm leading-relaxed">
+          <h2 className="text-2xl font-bold text-foreground mb-2">Tack{form.name ? `, ${form.name}` : ""}!</h2>
+          <p className="text-muted-foreground text-sm leading-relaxed">
             Vi har tagit emot dina uppgifter och återkommer inom kort för att boka in ett kickoff-möte.
           </p>
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <p className="text-xs text-slate-400">Syns Nu · Hemsidaavdelningen</p>
+          <div className="mt-6 pt-6 border-t border-border">
+            <p className="text-xs text-muted-foreground">Syns Nu · Hemsidaavdelningen</p>
           </div>
         </div>
       </div>
@@ -168,11 +171,11 @@ export default function OnboardingPage() {
   const current = STEPS[step - 1]
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-xl w-full max-w-2xl overflow-hidden">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="bg-card rounded-3xl shadow-xl w-full max-w-2xl overflow-hidden border border-border">
 
         {/* Header */}
-        <div className="bg-amber-500 px-8 py-6">
+        <div className="bg-primary px-8 py-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center">
               <span className="text-white font-bold text-sm">SN</span>
@@ -180,44 +183,44 @@ export default function OnboardingPage() {
             <span className="text-white font-bold text-sm">Syns Nu · Hemsidaavdelningen</span>
           </div>
           <h1 className="text-white text-xl font-bold">Onboarding – Ny hemsida</h1>
-          <p className="text-amber-200 text-sm mt-1">Fyll i formuläret så förbereder vi allt inför uppstart</p>
+          <p className="text-primary-foreground/80 text-sm mt-1">Fyll i formuläret så förbereder vi allt inför uppstart</p>
         </div>
 
         {/* Draft-banner */}
         {hasDraft && step === 1 && (
-          <div className="bg-amber-50 border-b border-amber-100 px-8 py-3 flex items-center justify-between">
-            <p className="text-sm text-amber-700">Du har ett sparat utkast.</p>
-            <button onClick={loadDraft} className="text-sm font-semibold text-amber-600 hover:text-amber-800">
+          <div className="bg-primary/10 border-b border-primary/20 px-8 py-3 flex items-center justify-between">
+            <p className="text-sm text-primary">Du har ett sparat utkast.</p>
+            <button onClick={loadDraft} className="text-sm font-semibold text-primary hover:text-primary/80">
               Fortsätt utkast →
             </button>
           </div>
         )}
 
         {/* Steg-indikator */}
-        <div className="px-8 py-4 border-b border-slate-100">
+        <div className="px-8 py-4 border-b border-border">
           <div className="flex items-center">
             {Array.from({ length: 6 }, (_, i) => i + 1).map(n => (
               <div key={n} className="flex items-center flex-1">
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${
-                  n < step   ? "bg-amber-500 text-white" :
-                  n === step ? "bg-amber-500 text-white ring-4 ring-amber-100" :
-                  "bg-slate-100 text-slate-400"
+                  n < step   ? "bg-primary text-primary-foreground" :
+                  n === step ? "bg-primary text-primary-foreground ring-4 ring-primary/20" :
+                  "bg-muted text-muted-foreground"
                 }`}>
                   {n < step ? <CheckCircle className="w-4 h-4" /> : n}
                 </div>
                 {n < 6 && (
-                  <div className={`h-0.5 flex-1 mx-1 transition-all ${n < step ? "bg-amber-500" : "bg-slate-200"}`} />
+                  <div className={`h-0.5 flex-1 mx-1 transition-all ${n < step ? "bg-primary" : "bg-border"}`} />
                 )}
               </div>
             ))}
           </div>
-          <p className="text-xs text-slate-400 mt-2">Steg {step} av 6 — {current.title}</p>
+          <p className="text-xs text-muted-foreground mt-2">Steg {step} av 6 — {current.title}</p>
         </div>
 
         {/* Steg-innehåll */}
         <div className="px-8 py-6">
-          <h2 className="text-lg font-bold text-slate-900 mb-0.5">{current.title}</h2>
-          <p className="text-slate-500 text-sm mb-6">{current.subtitle}</p>
+          <h2 className="text-lg font-bold text-foreground mb-0.5">{current.title}</h2>
+          <p className="text-muted-foreground text-sm mb-6">{current.subtitle}</p>
 
           {step === 1 && <Step1 form={form} set={set} errors={errors} />}
           {step === 2 && <Step2 form={form} set={set} errors={errors} />}
@@ -231,7 +234,7 @@ export default function OnboardingPage() {
         <div className="px-8 pb-8 flex justify-between items-center">
           <div className="flex items-center gap-3">
             {step > 1
-              ? <button onClick={back} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 text-sm font-medium transition-colors">
+              ? <button onClick={back} className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
                   <ChevronLeft className="w-4 h-4" /> Föregående
                 </button>
               : <div />}
@@ -239,13 +242,13 @@ export default function OnboardingPage() {
           <div className="flex items-center gap-3">
             {step < 6 && (
               <button onClick={saveDraft}
-                className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition-colors">
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
                 <Save className="w-3.5 h-3.5" /> Spara utkast
               </button>
             )}
             {step < 6 ? (
               <button onClick={next}
-                className="flex items-center gap-2 bg-amber-500 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-amber-600 transition-colors shadow-sm">
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm">
                 Nästa <ChevronRight className="w-4 h-4" />
               </button>
             ) : (
@@ -269,12 +272,12 @@ function OnbField({ label, value, onChange, error, multiline, type, placeholder 
   label: string; value: string; onChange: (v: string) => void; error?: string
   multiline?: boolean; type?: string; placeholder?: string
 }) {
-  const cls = `w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200 transition-all ${
-    error ? "border-red-300 bg-red-50" : "border-slate-200"
+  const cls = `w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all bg-background text-foreground ${
+    error ? "border-red-300 bg-red-50" : "border-border"
   }`
   return (
     <div>
-      <label className="text-sm font-semibold text-slate-700 block mb-1.5">{label}</label>
+      <label className="text-sm font-semibold text-foreground block mb-1.5">{label}</label>
       {multiline
         ? <textarea value={value} onChange={e => onChange(e.target.value)} rows={3} className={cls} placeholder={placeholder} />
         : <input type={type || "text"} value={value} onChange={e => onChange(e.target.value)} className={cls} placeholder={placeholder} />
@@ -287,14 +290,14 @@ function OnbField({ label, value, onChange, error, multiline, type, placeholder 
 function YesNo({ label, value, onChange, error }: { label: string; value: boolean | null; onChange: (v: boolean) => void; error?: string }) {
   return (
     <div>
-      <label className="text-sm font-semibold text-slate-700 block mb-2">{label}</label>
+      <label className="text-sm font-semibold text-foreground block mb-2">{label}</label>
       <div className="flex gap-3">
         {[true, false].map(v => (
           <button key={String(v)} type="button" onClick={() => onChange(v)}
             className={`flex-1 py-2.5 rounded-xl border text-sm font-medium transition-all ${
               value === v
-                ? (v ? "bg-amber-500 border-amber-500 text-white shadow-sm" : "bg-slate-700 border-slate-700 text-white shadow-sm")
-                : "border-slate-200 text-slate-600 hover:border-amber-300 hover:bg-amber-50"
+                ? "bg-primary border-primary text-primary-foreground shadow-sm"
+                : "border-border text-muted-foreground hover:border-primary/60 hover:bg-primary/10"
             }`}>
             {v ? "Ja" : "Nej"}
           </button>
@@ -337,7 +340,7 @@ function Step2({ form, set, errors }: { form: FormData; set: SetFn; errors: Reco
 function Step3({ form, set }: { form: FormData; set: SetFn }) {
   return (
     <div className="space-y-5">
-      <p className="text-xs text-slate-500 bg-slate-50 rounded-xl p-3">
+      <p className="text-xs text-muted-foreground bg-muted rounded-xl p-3">
         Texter och bilder är ofta det som tar längst tid. Ju mer som är klart, desto snabbare kan vi bygga klart hemsidan.
       </p>
       <YesNo label="Har ni texter klara för hemsidan?" value={form.hasTexts}  onChange={v => set("hasTexts", v)} />
@@ -359,16 +362,16 @@ function Step4({ form, set }: { form: FormData; set: SetFn }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-500">Kryssa i det ni vill ha på hemsidan – ni kan alltid lägga till mer senare.</p>
+      <p className="text-xs text-muted-foreground">Kryssa i det ni vill ha på hemsidan – ni kan alltid lägga till mer senare.</p>
       <div className="space-y-2">
         {features.map(({ key, label, desc }) => (
           <label key={key} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-            form[key] ? "border-amber-300 bg-amber-50" : "border-slate-200 hover:border-amber-200"
+            form[key] ? "border-primary/60 bg-primary/10" : "border-border hover:border-primary/40"
           }`}>
-            <input type="checkbox" checked={!!form[key]} onChange={e => set(key, e.target.checked)} className="w-4 h-4 accent-amber-500 flex-shrink-0" />
+            <input type="checkbox" checked={!!form[key]} onChange={e => set(key, e.target.checked)} className="w-4 h-4 accent-primary flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-slate-700">{label}</p>
-              <p className="text-xs text-slate-500">{desc}</p>
+              <p className="text-sm font-medium text-foreground">{label}</p>
+              <p className="text-xs text-muted-foreground">{desc}</p>
             </div>
           </label>
         ))}
@@ -388,14 +391,14 @@ function Step5({ form, set }: { form: FormData; set: SetFn }) {
   return (
     <div className="space-y-5">
       <div>
-        <label className="text-sm font-semibold text-slate-700 block mb-2">Vad är det primära syftet med hemsidan?</label>
+        <label className="text-sm font-semibold text-foreground block mb-2">Vad är det primära syftet med hemsidan?</label>
         <div className="space-y-2">
           {purposes.map(p => (
             <label key={p} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-              form.purpose === p ? "border-amber-300 bg-amber-50" : "border-slate-200 hover:border-amber-200"
+              form.purpose === p ? "border-primary/60 bg-primary/10" : "border-border hover:border-primary/40"
             }`}>
-              <input type="radio" name="purpose" value={p} checked={form.purpose === p} onChange={() => set("purpose", p)} className="accent-amber-500" />
-              <span className="text-sm text-slate-700">{p}</span>
+              <input type="radio" name="purpose" value={p} checked={form.purpose === p} onChange={() => set("purpose", p)} className="accent-primary" />
+              <span className="text-sm text-foreground">{p}</span>
             </label>
           ))}
         </div>
@@ -451,19 +454,19 @@ function Step6({ form }: { form: FormData }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl p-3 text-sm text-amber-700">
+      <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-xl p-3 text-sm text-primary">
         <Eye className="w-4 h-4 flex-shrink-0" />
         Kontrollera att allt stämmer innan du skickar in. Gå tillbaka om något behöver ändras.
       </div>
 
       {sections.map(sec => (
-        <div key={sec.title} className="bg-slate-50 rounded-xl p-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">{sec.title}</p>
+        <div key={sec.title} className="bg-muted rounded-xl p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">{sec.title}</p>
           <div className="space-y-1.5">
             {sec.rows.map(([label, value]) => (
               <div key={label} className="flex justify-between text-sm">
-                <span className="text-slate-500">{label}</span>
-                <span className="text-slate-800 font-medium text-right max-w-xs">{value}</span>
+                <span className="text-muted-foreground">{label}</span>
+                <span className="text-foreground font-medium text-right max-w-xs">{value}</span>
               </div>
             ))}
           </div>
@@ -471,20 +474,20 @@ function Step6({ form }: { form: FormData }) {
       ))}
 
       {features.length > 0 && (
-        <div className="bg-slate-50 rounded-xl p-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Önskade funktioner</p>
+        <div className="bg-muted rounded-xl p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Önskade funktioner</p>
           <div className="flex flex-wrap gap-2">
             {features.map(f => (
-              <span key={String(f.key)} className="text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full">{f.label}</span>
+              <span key={String(f.key)} className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full">{f.label}</span>
             ))}
           </div>
         </div>
       )}
 
       {form.purpose && (
-        <div className="bg-slate-50 rounded-xl p-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Syfte med hemsidan</p>
-          <p className="text-sm text-slate-800">{form.purpose}</p>
+        <div className="bg-muted rounded-xl p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Syfte med hemsidan</p>
+          <p className="text-sm text-foreground">{form.purpose}</p>
         </div>
       )}
     </div>

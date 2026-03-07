@@ -33,6 +33,9 @@ export default function LeadsKanban({ leads, setLeads, clients, setClients, addA
   const [form, setForm] = useState<Omit<Lead, "id" | "created">>(EMPTY_LEAD)
   const [dragging, setDragging] = useState<number | null>(null)
 
+  // suppress unused warning
+  void clients
+
   const filteredLeads = sourceFilter === "alla" ? leads : leads.filter(l => l.source === sourceFilter)
   const pipelineValue = leads.reduce((s, l) => s + Number(l.estimatedValue || 0), 0)
 
@@ -115,7 +118,7 @@ export default function LeadsKanban({ leads, setLeads, clients, setClients, addA
           </span>
         }
       >
-        <button onClick={openNew} className="flex items-center gap-1.5 text-sm bg-amber-500 text-white px-4 py-2 rounded-xl hover:bg-amber-600 transition-colors font-medium shadow-sm">
+        <button onClick={openNew} className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary/90 transition-colors font-medium shadow-sm">
           <Plus className="w-4 h-4" /> Ny lead
         </button>
       </HPageHeader>
@@ -124,7 +127,9 @@ export default function LeadsKanban({ leads, setLeads, clients, setClients, addA
         {["alla", ...LEAD_SOURCES].map(s => (
           <button key={s} onClick={() => setSourceFilter(s)}
             className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-              sourceFilter === s ? "bg-amber-500 text-white" : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50"
+              sourceFilter === s
+                ? "bg-primary text-primary-foreground"
+                : "bg-card border border-border text-muted-foreground hover:bg-muted/60"
             }`}>
             {s === "alla" ? "Alla källor" : s}
           </button>
@@ -140,14 +145,14 @@ export default function LeadsKanban({ leads, setLeads, clients, setClients, addA
 
           return (
             <div key={col}
-              className={`rounded-2xl p-4 min-h-32 transition-colors ${isDanger ? "bg-red-50 dark:bg-red-900/20" : "bg-slate-100 dark:bg-slate-700/50"}`}
+              className={`rounded-2xl p-4 min-h-32 transition-colors ${isDanger ? "bg-red-50 dark:bg-red-900/20" : "bg-muted"}`}
               onDragOver={onDragOver}
               onDrop={e => onDrop(e, col)}>
               <div className="flex items-center gap-2 mb-3">
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${LEAD_STATUS[col]?.color}`}>
                   {LEAD_STATUS[col]?.label}
                 </span>
-                <span className="text-xs text-slate-400 font-medium">{colLeads.length}</span>
+                <span className="text-xs text-muted-foreground font-medium">{colLeads.length}</span>
                 {colValue > 0 && <span className="text-xs text-emerald-600 ml-auto font-medium">{formatSEK(colValue)}</span>}
               </div>
 
@@ -156,55 +161,55 @@ export default function LeadsKanban({ leads, setLeads, clients, setClients, addA
                   <div key={lead.id}
                     draggable
                     onDragStart={e => onDragStart(e, lead.id)}
-                    className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-slate-100 dark:border-slate-600 cursor-grab active:cursor-grabbing">
+                    className="bg-card rounded-xl p-4 shadow-sm border border-border cursor-grab active:cursor-grabbing">
 
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold text-sm text-slate-900 dark:text-slate-100 leading-tight">{lead.name}</p>
+                      <p className="font-semibold text-sm text-foreground leading-tight">{lead.name}</p>
                       <div className="flex gap-1 flex-shrink-0">
-                        <button onClick={() => openEdit(lead)} className="text-slate-300 hover:text-amber-500">
+                        <button onClick={() => openEdit(lead)} className="text-muted-foreground hover:text-primary">
                           <Pencil className="w-3 h-3" />
                         </button>
-                        <button onClick={() => setConfirmDel(lead.id)} className="text-slate-300 hover:text-red-400">
+                        <button onClick={() => setConfirmDel(lead.id)} className="text-muted-foreground hover:text-red-400">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">{lead.contact}</p>
-                    <p className="text-xs text-slate-400">{lead.email}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{lead.contact}</p>
+                    <p className="text-xs text-muted-foreground">{lead.email}</p>
                     {lead.estimatedValue > 0 && (
                       <p className="text-xs text-emerald-600 font-medium mt-1">{formatSEK(lead.estimatedValue)}</p>
                     )}
                     {lead.followUpDate && (
-                      <p className={`text-xs mt-1 font-medium ${lead.followUpDate === todayStr() ? "text-orange-600" : "text-slate-400"}`}>
+                      <p className={`text-xs mt-1 font-medium ${lead.followUpDate === todayStr() ? "text-orange-600" : "text-muted-foreground"}`}>
                         Uppföljning: {lead.followUpDate}
                       </p>
                     )}
                     {lead.notes && (
-                      <p className="text-xs text-slate-500 mt-2 bg-slate-50 dark:bg-slate-700 rounded-lg p-2 leading-relaxed">{lead.notes}</p>
+                      <p className="text-xs text-muted-foreground mt-2 bg-muted rounded-lg p-2 leading-relaxed">{lead.notes}</p>
                     )}
                     {lead.lostReason && (
                       <p className="text-xs text-red-500 mt-1 italic">"{lead.lostReason}"</p>
                     )}
 
                     {(lead.timeline || []).length > 0 && (
-                      <div className="mt-2 space-y-1 border-t border-slate-100 dark:border-slate-600 pt-2">
+                      <div className="mt-2 space-y-1 border-t border-border pt-2">
                         {lead.timeline.slice(0, 2).map((n, i) => (
-                          <div key={i} className="text-xs text-slate-500">
-                            <span className="text-slate-400">{n.date}: </span>{n.text}
+                          <div key={i} className="text-xs text-muted-foreground">
+                            <span className="text-muted-foreground/70">{n.date}: </span>{n.text}
                           </div>
                         ))}
                       </div>
                     )}
 
-                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-600 flex flex-wrap gap-1">
+                    <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-1">
                       {otherCols.map(next => (
                         <button key={next} onClick={() => moveStatus(lead.id, next)}
-                          className="text-xs text-amber-600 hover:bg-amber-50 px-2 py-1 rounded-lg transition-colors">
+                          className="text-xs text-primary hover:bg-primary/10 px-2 py-1 rounded-lg transition-colors">
                           → {LEAD_STATUS[next]?.label}
                         </button>
                       ))}
                       <button onClick={() => { setNoteModal(lead.id); setNoteText("") }}
-                        className="text-xs text-slate-500 hover:bg-slate-100 px-2 py-1 rounded-lg transition-colors">
+                        className="text-xs text-muted-foreground hover:bg-muted/60 px-2 py-1 rounded-lg transition-colors">
                         <MessageSquarePlus className="w-3 h-3 inline mr-1" />Notera
                       </button>
                       {lead.status === "avtal_signerat" && (
@@ -214,12 +219,12 @@ export default function LeadsKanban({ leads, setLeads, clients, setClients, addA
                         </button>
                       )}
                     </div>
-                    <p className="text-xs text-slate-300 mt-2">{lead.source} · {lead.created}</p>
+                    <p className="text-xs text-muted-foreground mt-2">{lead.source} · {lead.created}</p>
                   </div>
                 ))}
                 {colLeads.length === 0 && (
-                  <div className="border-2 border-dashed border-slate-200 dark:border-slate-600 rounded-xl p-6 text-center">
-                    <p className="text-xs text-slate-400">Dra hit eller lägg till</p>
+                  <div className="border-2 border-dashed border-border rounded-xl p-6 text-center">
+                    <p className="text-xs text-muted-foreground">Dra hit eller lägg till</p>
                   </div>
                 )}
               </div>

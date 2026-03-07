@@ -26,7 +26,15 @@ function formatDate(): string {
   })
 }
 
-export function Topbar({ onMenuClick: _onMenuClick }: { onMenuClick?: () => void }) {
+export function Topbar({
+  onMenuClick: _onMenuClick,
+  onAvatarClick,
+  unreadCount = 0,
+}: {
+  onMenuClick?: () => void
+  onAvatarClick?: () => void
+  unreadCount?: number
+}) {
   const router = useRouter()
   const { db } = useDB()
   const { user } = useAuth()
@@ -112,12 +120,18 @@ export function Topbar({ onMenuClick: _onMenuClick }: { onMenuClick?: () => void
       {/* Right: User avatar */}
       {user && (
         <div className="flex items-center gap-2 shrink-0">
-          <div
-            className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+          <button
+            onClick={onAvatarClick}
+            className="relative h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 focus:outline-none"
             style={{ background: userColor }}
           >
             {user.name[0]}
-          </div>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </button>
           <span className="text-sm font-medium text-foreground hidden md:block">{user.name}</span>
         </div>
       )}

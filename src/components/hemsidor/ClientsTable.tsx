@@ -104,28 +104,28 @@ export default function ClientsTable({ clients, setClients, tasks, setTasks, add
     <div className="flex gap-6">
       <div className="flex-1 min-w-0">
         <HPageHeader title="Befintliga kunder" sub={`${clients.length} kunder totalt`}>
-          <button onClick={doExportCSV} className="text-xs border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-xl transition-colors">Exportera CSV</button>
-          <button onClick={openNew} className="flex items-center gap-1.5 text-sm bg-amber-500 text-white px-4 py-2 rounded-xl hover:bg-amber-600 transition-colors font-medium shadow-sm">
+          <button onClick={doExportCSV} className="text-xs border border-border text-muted-foreground hover:bg-muted/60 px-3 py-1.5 rounded-xl transition-colors">Exportera CSV</button>
+          <button onClick={openNew} className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary/90 transition-colors font-medium shadow-sm">
             <Plus className="w-4 h-4" /> Ny kund
           </button>
         </HPageHeader>
 
         <div className="flex gap-2 mb-4 flex-wrap items-center">
           <div className="relative flex-1 min-w-48">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Sök kund, kontakt, e-post..."
-              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-200 dark:bg-slate-800 dark:border-slate-600" />
+              className="w-full pl-9 pr-4 py-2 text-sm border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 bg-card text-foreground" />
           </div>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-200 bg-white dark:bg-slate-800 dark:border-slate-600">
+            className="text-sm border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 bg-card text-foreground">
             <option value="alla">Alla status</option>
             <option value="aktiv">Aktiv</option>
             <option value="pausad">Pausad</option>
             <option value="avslutas">Avslutas</option>
           </select>
           <select value={filterPlan} onChange={e => setFilterPlan(e.target.value)}
-            className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-200 bg-white dark:bg-slate-800 dark:border-slate-600">
+            className="text-sm border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 bg-card text-foreground">
             <option value="alla">Alla planer</option>
             <option value="Basic">Basic</option>
             <option value="Standard">Standard</option>
@@ -133,17 +133,17 @@ export default function ClientsTable({ clients, setClients, tasks, setTasks, add
           </select>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+        <div className="bg-card rounded-2xl border border-border overflow-hidden">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+              <tr className="border-b border-border bg-muted">
                 {COLS.map(c => (
                   <th key={c.key} onClick={() => handleSort(c.key)}
-                    className="text-xs font-semibold text-slate-500 px-4 py-3 cursor-pointer hover:text-slate-800 select-none whitespace-nowrap">
+                    className="text-xs font-semibold text-muted-foreground px-4 py-3 cursor-pointer hover:text-foreground select-none whitespace-nowrap">
                     <span className="flex items-center gap-1">{c.label}<SortIcon col={c.key} /></span>
                   </th>
                 ))}
-                <th className="text-xs font-semibold text-slate-500 px-4 py-3">Åtgärd</th>
+                <th className="text-xs font-semibold text-muted-foreground px-4 py-3">Åtgärd</th>
               </tr>
             </thead>
             <tbody>
@@ -152,20 +152,20 @@ export default function ClientsTable({ clients, setClients, tasks, setTasks, add
                 const renewalWarn = renewal !== null && renewal <= 30 && renewal >= 0
                 return (
                   <tr key={client.id} onClick={() => setDetailClient(client)}
-                    className="border-b border-slate-50 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
+                    className="border-b border-border/50 hover:bg-muted/40 transition-colors cursor-pointer">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-amber-50 rounded-full flex items-center justify-center flex-shrink-0">
-                          <span className="text-xs font-bold text-amber-600">{client.name[0]}</span>
+                        <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs font-bold text-primary">{client.name[0]}</span>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{client.name}</p>
-                          <p className="text-xs text-slate-400">{client.contact}</p>
+                          <p className="text-sm font-medium text-foreground">{client.name}</p>
+                          <p className="text-xs text-muted-foreground">{client.contact}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-medium text-slate-600 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-lg">{client.plan}</span>
+                      <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-lg">{client.plan}</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${CLIENT_STATUS_STYLE[client.status]}`}>
@@ -173,24 +173,24 @@ export default function ClientsTable({ clients, setClients, tasks, setTasks, add
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{formatSEK(client.monthlyFee)}</span>
+                      <span className="text-sm font-semibold text-foreground">{formatSEK(client.monthlyFee)}</span>
                     </td>
                     <td className="px-4 py-3">
                       {client.renewalDate ? (
                         <div className="flex items-center gap-1">
                           {renewalWarn && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
-                          <span className={`text-xs ${renewalWarn ? "text-amber-600 font-medium" : "text-slate-500"}`}>
+                          <span className={`text-xs ${renewalWarn ? "text-amber-600 font-medium" : "text-muted-foreground"}`}>
                             {client.renewalDate}
                           </span>
                         </div>
-                      ) : <span className="text-xs text-slate-300">–</span>}
+                      ) : <span className="text-xs text-muted-foreground/40">–</span>}
                     </td>
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => openEdit(client)} className="text-slate-400 hover:text-amber-500 p-1">
+                        <button onClick={() => openEdit(client)} className="text-muted-foreground hover:text-primary p-1">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
-                        <button onClick={() => setConfirmDel(client.id)} className="text-slate-400 hover:text-red-500 p-1">
+                        <button onClick={() => setConfirmDel(client.id)} className="text-muted-foreground hover:text-red-500 p-1">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -199,7 +199,7 @@ export default function ClientsTable({ clients, setClients, tasks, setTasks, add
                 )
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="text-center text-slate-400 text-sm py-12">Inga kunder hittades</td></tr>
+                <tr><td colSpan={6} className="text-center text-muted-foreground text-sm py-12">Inga kunder hittades</td></tr>
               )}
             </tbody>
           </table>
@@ -207,48 +207,48 @@ export default function ClientsTable({ clients, setClients, tasks, setTasks, add
       </div>
 
       {detailClient && (
-        <div className="w-80 flex-shrink-0 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-5 h-fit sticky top-8 max-h-[calc(100vh-6rem)] overflow-y-auto">
+        <div className="w-80 flex-shrink-0 bg-card rounded-2xl border border-border p-5 h-fit sticky top-8 max-h-[calc(100vh-6rem)] overflow-y-auto">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{detailClient.name}</h2>
-            <button onClick={() => setDetailClient(null)} className="text-slate-400 hover:text-slate-600">
+            <h2 className="font-bold text-foreground text-sm">{detailClient.name}</h2>
+            <button onClick={() => setDetailClient(null)} className="text-muted-foreground hover:text-foreground">
               <X className="w-4 h-4" />
             </button>
           </div>
 
           <div className="space-y-2 text-xs mb-5">
-            <div className="flex justify-between"><span className="text-slate-400">Kontakt</span><span className="text-slate-700 dark:text-slate-300 font-medium">{detailClient.contact}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">E-post</span><span className="text-slate-700 dark:text-slate-300">{detailClient.email}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Telefon</span><span className="text-slate-700 dark:text-slate-300">{detailClient.phone}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Kontakt</span><span className="text-foreground font-medium">{detailClient.contact}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">E-post</span><span className="text-foreground">{detailClient.email}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Telefon</span><span className="text-foreground">{detailClient.phone}</span></div>
             <div className="flex justify-between items-center">
-              <span className="text-slate-400">Hemsida</span>
+              <span className="text-muted-foreground">Hemsida</span>
               {detailClient.website ? (
                 <a href={`https://${detailClient.website}`} target="_blank" rel="noreferrer"
-                  className="text-amber-600 hover:underline flex items-center gap-1">
+                  className="text-primary hover:underline flex items-center gap-1">
                   {detailClient.website} <ExternalLink className="w-3 h-3" />
                 </a>
-              ) : <span className="text-slate-300">–</span>}
+              ) : <span className="text-muted-foreground/40">–</span>}
             </div>
-            <div className="flex justify-between"><span className="text-slate-400">Plan</span><span className="text-slate-700 dark:text-slate-300">{detailClient.plan}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Avgift</span><span className="text-slate-700 dark:text-slate-300 font-semibold">{formatSEK(detailClient.monthlyFee)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Startdatum</span><span className="text-slate-700 dark:text-slate-300">{detailClient.startDate}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Plan</span><span className="text-foreground">{detailClient.plan}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Avgift</span><span className="text-foreground font-semibold">{formatSEK(detailClient.monthlyFee)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Startdatum</span><span className="text-foreground">{detailClient.startDate}</span></div>
             {detailClient.renewalDate && (
               <div className="flex justify-between">
-                <span className="text-slate-400">Förnyelse</span>
-                <span className={`font-medium ${(daysUntil(detailClient.renewalDate) ?? 999) <= 30 ? "text-amber-600" : "text-slate-700 dark:text-slate-300"}`}>
+                <span className="text-muted-foreground">Förnyelse</span>
+                <span className={`font-medium ${(daysUntil(detailClient.renewalDate) ?? 999) <= 30 ? "text-amber-600" : "text-foreground"}`}>
                   {detailClient.renewalDate}
                 </span>
               </div>
             )}
           </div>
 
-          <div className="border-t border-slate-100 dark:border-slate-700 pt-4 mb-4">
-            <p className="text-xs font-semibold text-slate-500 mb-2">Tasks ({clientTasks.length})</p>
+          <div className="border-t border-border pt-4 mb-4">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Tasks ({clientTasks.length})</p>
             {clientTasks.length === 0
-              ? <p className="text-xs text-slate-400">Inga aktiva tasks</p>
+              ? <p className="text-xs text-muted-foreground">Inga aktiva tasks</p>
               : clientTasks.map(t => (
                 <div key={t.id} className="flex items-center gap-2 py-1.5">
                   <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${TASK_STATUS[t.status]?.dot}`} />
-                  <span className="text-xs text-slate-700 dark:text-slate-300 flex-1 truncate">{t.title}</span>
+                  <span className="text-xs text-foreground flex-1 truncate">{t.title}</span>
                   <select value={t.status}
                     onChange={e => setTasks(prev => prev.map(task => task.id === t.id ? { ...task, status: e.target.value as CrmTask["status"], lastUpdated: todayStr() } : task))}
                     className={`text-xs rounded-full px-1.5 py-0.5 border-0 cursor-pointer focus:outline-none ${TASK_STATUS[t.status]?.color}`}
@@ -262,8 +262,8 @@ export default function ClientsTable({ clients, setClients, tasks, setTasks, add
             }
           </div>
 
-          <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
-            <p className="text-xs font-semibold text-slate-500 mb-2">Anteckningar</p>
+          <div className="border-t border-border pt-4">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Anteckningar</p>
             <textarea
               defaultValue={detailClient.notes || ""}
               onBlur={e => {
@@ -273,13 +273,13 @@ export default function ClientsTable({ clients, setClients, tasks, setTasks, add
               }}
               rows={4}
               placeholder="Skriv interna anteckningar om kunden..."
-              className="w-full text-xs border border-slate-200 dark:border-slate-600 dark:bg-slate-700 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-200 resize-none"
+              className="w-full text-xs border border-border bg-card rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none text-foreground"
             />
           </div>
 
           <div className="mt-4 flex gap-2">
             <button onClick={() => openEdit(detailClient)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs hover:bg-slate-50 transition-colors">
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-border text-muted-foreground rounded-xl text-xs hover:bg-muted/60 transition-colors">
               <Pencil className="w-3.5 h-3.5" /> Redigera
             </button>
             <button onClick={() => setConfirmDel(detailClient.id)}

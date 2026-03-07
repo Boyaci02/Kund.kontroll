@@ -12,21 +12,21 @@ function todayStr() {
 const EMPTY = { name: "", email: "", category: "Ny funktion", title: "", description: "", priority: "normal" }
 
 const PRIORITY_OPTS = [
-  { value: "lag",        label: "Låg",        color: "border-slate-200 text-slate-600 bg-slate-50" },
-  { value: "normal",     label: "Normal",     color: "border-blue-200  text-blue-700  bg-blue-50"  },
-  { value: "bradskande", label: "Brådskande", color: "border-red-200   text-red-700   bg-red-50"   },
+  { value: "lag",        label: "Låg",        color: "border-border text-muted-foreground bg-muted" },
+  { value: "normal",     label: "Normal",     color: "border-blue-200 text-blue-700 bg-blue-50"    },
+  { value: "bradskande", label: "Brådskande", color: "border-red-200 text-red-700 bg-red-50"       },
 ]
 
 function inputCls(error?: string) {
-  return `w-full text-sm px-3 py-2 border rounded-lg bg-white outline-none transition-colors focus:ring-2 focus:ring-amber-400 focus:border-amber-400 ${
-    error ? "border-red-300 bg-red-50" : "border-slate-200 hover:border-slate-300"
+  return `w-full text-sm px-3 py-2 border rounded-lg bg-card text-foreground outline-none transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary ${
+    error ? "border-red-300 bg-red-50" : "border-border hover:border-border/80"
   }`
 }
 
 function Field({ label, required, error, children }: { label: string; required?: boolean; error?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-slate-600 mb-1">
+      <label className="block text-xs font-semibold text-muted-foreground mb-1">
         {label}{required && <span className="text-red-400 ml-0.5">*</span>}
       </label>
       {children}
@@ -75,17 +75,17 @@ export default function ForfraganPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 max-w-md w-full text-center">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="bg-card rounded-2xl border border-border shadow-sm p-10 max-w-md w-full text-center">
           <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-7 h-7 text-emerald-500" />
           </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Förfrågan skickad!</h2>
-          <p className="text-sm text-slate-500 mb-1">Din förfrågan har tagits emot och vi återkommer så snart vi kan.</p>
-          <p className="text-xs text-slate-400 mt-3">Ärendenummer: <span className="font-mono font-semibold text-slate-600">#{submitted}</span></p>
+          <h2 className="text-xl font-bold text-foreground mb-2">Förfrågan skickad!</h2>
+          <p className="text-sm text-muted-foreground mb-1">Din förfrågan har tagits emot och vi återkommer så snart vi kan.</p>
+          <p className="text-xs text-muted-foreground mt-3">Ärendenummer: <span className="font-mono font-semibold text-foreground">#{submitted}</span></p>
           <button
             onClick={() => { setForm(EMPTY); setSubmitted(null) }}
-            className="mt-6 text-xs text-amber-600 hover:underline">
+            className="mt-6 text-xs text-primary hover:underline">
             Skicka en ny förfrågan
           </button>
         </div>
@@ -94,16 +94,16 @@ export default function ForfraganPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 max-w-lg w-full">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="bg-card rounded-2xl border border-border shadow-sm p-8 max-w-lg w-full">
 
         <div className="flex items-center gap-3 mb-7">
-          <div className="w-9 h-9 bg-amber-500 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
-            <Send className="w-4 h-4 text-white" />
+          <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
+            <Send className="w-4 h-4 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="font-bold text-slate-900 text-lg leading-tight">Skicka en förfrågan</h1>
-            <p className="text-xs text-slate-400">Berätta vad du vill ha hjälp med</p>
+            <h1 className="font-bold text-foreground text-lg leading-tight">Skicka en förfrågan</h1>
+            <p className="text-xs text-muted-foreground">Berätta vad du vill ha hjälp med</p>
           </div>
         </div>
 
@@ -143,7 +143,7 @@ export default function ForfraganPage() {
                   className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-all ${
                     form.priority === p.value
                       ? p.color + " ring-2 ring-offset-1 ring-current"
-                      : "border-slate-200 text-slate-400 bg-white hover:bg-slate-50"
+                      : "border-border text-muted-foreground bg-card hover:bg-muted/60"
                   }`}>
                   {p.label}
                 </button>
@@ -152,7 +152,7 @@ export default function ForfraganPage() {
           </Field>
 
           <button type="submit"
-            className="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors mt-2">
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors mt-2">
             <Send className="w-4 h-4" />
             Skicka förfrågan
           </button>

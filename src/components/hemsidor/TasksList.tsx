@@ -137,7 +137,7 @@ export default function TasksList({ tasks, setTasks, clients, addActivity }: Pro
   return (
     <div>
       <HPageHeader title="Pågående tasks" sub={`${openCount} öppna tasks`}>
-        <button onClick={openNew} className="flex items-center gap-1.5 text-sm bg-amber-500 text-white px-4 py-2 rounded-xl hover:bg-amber-600 transition-colors font-medium shadow-sm">
+        <button onClick={openNew} className="flex items-center gap-1.5 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary/90 transition-colors font-medium shadow-sm">
           <Plus className="w-4 h-4" /> Ny task
         </button>
       </HPageHeader>
@@ -147,7 +147,7 @@ export default function TasksList({ tasks, setTasks, clients, addActivity }: Pro
           {filterOptions.map(([id, label, count]) => (
             <button key={id} onClick={() => setFilter(id)}
               className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                filter === id ? "bg-amber-500 text-white shadow-sm" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-50"
+                filter === id ? "bg-primary text-primary-foreground shadow-sm" : "bg-card text-muted-foreground border border-border hover:bg-muted/60"
               }`}>
               {label}{count !== null && <span className="ml-1 opacity-70">{count}</span>}
             </button>
@@ -157,7 +157,7 @@ export default function TasksList({ tasks, setTasks, clients, addActivity }: Pro
           {[["dueDate","Deadline"],["priority","Prioritet"],["created","Skapad"]].map(([key, label]) => (
             <button key={key} onClick={() => setSortBy(key)}
               className={`px-2.5 py-1.5 rounded-lg text-xs transition-all ${
-                sortBy === key ? "bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium" : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
+                sortBy === key ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:bg-muted/60"
               }`}>{label}</button>
           ))}
         </div>
@@ -169,10 +169,10 @@ export default function TasksList({ tasks, setTasks, clients, addActivity }: Pro
             const dayTasks = filtered.filter(t => t.dueDate === day.date)
             return (
               <div key={day.date}>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 capitalize">{day.label}</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 capitalize">{day.label}</p>
                 {dayTasks.length === 0
-                  ? <p className="text-xs text-slate-300 pl-2">Inga tasks</p>
-                  : <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+                  ? <p className="text-xs text-muted-foreground/40 pl-2">Inga tasks</p>
+                  : <div className="bg-card rounded-2xl border border-border overflow-hidden">
                     {dayTasks.map(task => <TaskRow key={task.id} task={task} expandedId={expandedId} setExpandedId={setExpandedId} moveStatus={moveStatus} cyclePriority={cyclePriority} openEdit={openEdit} setConfirmDel={setConfirmDel} archiveTask={archiveTask} addComment={addComment} commentText={commentText} setCommentText={setCommentText} />)}
                   </div>
                 }
@@ -181,7 +181,7 @@ export default function TasksList({ tasks, setTasks, clients, addActivity }: Pro
           })}
         </div>
       ) : (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+        <div className="bg-card rounded-2xl border border-border overflow-hidden">
           {filtered.map(task => (
             <TaskRow key={task.id} task={task} expandedId={expandedId} setExpandedId={setExpandedId}
               moveStatus={moveStatus} cyclePriority={cyclePriority} openEdit={openEdit}
@@ -189,7 +189,7 @@ export default function TasksList({ tasks, setTasks, clients, addActivity }: Pro
               addComment={addComment} commentText={commentText} setCommentText={setCommentText} />
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-16 text-slate-400">
+            <div className="text-center py-16 text-muted-foreground">
               <CheckSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">Inga tasks att visa</p>
             </div>
@@ -209,14 +209,14 @@ export default function TasksList({ tasks, setTasks, clients, addActivity }: Pro
             <HFormField label="Deadline" type="date" value={form.dueDate} onChange={v => setForm({ ...form, dueDate: v })} />
           </div>
           <HFormField label="Ansvarig" value={form.assignee} onChange={v => setForm({ ...form, assignee: v })} placeholder="T.ex. Emanuel" />
-          <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700 rounded-xl">
+          <div className="flex items-center gap-3 p-3 bg-muted rounded-xl">
             <input type="checkbox" id="recurring" checked={form.isRecurring || false}
               onChange={e => setForm({ ...form, isRecurring: e.target.checked })}
-              className="w-4 h-4 accent-amber-500" />
-            <label htmlFor="recurring" className="text-sm text-slate-700 dark:text-slate-200 flex-1">Återkommande task</label>
+              className="w-4 h-4 accent-primary" />
+            <label htmlFor="recurring" className="text-sm text-foreground flex-1">Återkommande task</label>
             {form.isRecurring && (
               <select value={form.recurringInterval} onChange={e => setForm({ ...form, recurringInterval: e.target.value })}
-                className="text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-300 bg-white dark:bg-slate-800">
+                className="text-xs border border-border rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary/20 bg-card text-foreground">
                 <option value="">Välj interval</option>
                 <option value="weekly">Veckovis</option>
                 <option value="monthly">Månadsvis</option>
@@ -253,19 +253,19 @@ function TaskRow({ task, expandedId, setExpandedId, moveStatus, cyclePriority, o
   const archived = !!task.archivedAt
 
   return (
-    <div className={`border-b border-slate-50 dark:border-slate-700 last:border-0 ${overdue ? "border-l-2 border-l-red-400" : ""}`}>
-      <div className="flex items-center gap-3 py-2.5 px-4 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group">
+    <div className={`border-b border-border/50 last:border-0 ${overdue ? "border-l-2 border-l-red-400" : ""}`}>
+      <div className="flex items-center gap-3 py-2.5 px-4 hover:bg-muted/40 transition-colors group">
         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${overdue ? "bg-red-500" : TASK_STATUS[task.status]?.dot}`} />
 
         <button onClick={() => setExpandedId(expanded ? null : task.id)} className="flex-1 min-w-0 text-left flex items-center gap-2">
-          <span className={`text-sm font-medium truncate ${overdue ? "text-red-700" : "text-slate-900 dark:text-slate-100"}`}>{task.title}</span>
-          <span className="text-xs text-slate-400 whitespace-nowrap">· {task.clientName}</span>
-          {expanded ? <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" /> : <ChevronRight className="w-3 h-3 text-slate-400 flex-shrink-0" />}
-          {(task.comments || []).length > 0 && <MessageCircle className="w-3 h-3 text-slate-400 flex-shrink-0" />}
+          <span className={`text-sm font-medium truncate ${overdue ? "text-red-700" : "text-foreground"}`}>{task.title}</span>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">· {task.clientName}</span>
+          {expanded ? <ChevronDown className="w-3 h-3 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
+          {(task.comments || []).length > 0 && <MessageCircle className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
         </button>
 
         {task.dueDate && (
-          <span className={`text-xs whitespace-nowrap flex-shrink-0 ${overdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+          <span className={`text-xs whitespace-nowrap flex-shrink-0 ${overdue ? "text-red-500 font-medium" : "text-muted-foreground"}`}>
             {overdue && <AlertTriangle className="w-3 h-3 inline mr-1" />}{task.dueDate}
           </span>
         )}
@@ -283,29 +283,29 @@ function TaskRow({ task, expandedId, setExpandedId, moveStatus, cyclePriority, o
         )}
 
         <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          {!archived && <button onClick={() => openEdit(task)} className="text-slate-300 hover:text-amber-500"><Pencil className="w-3.5 h-3.5" /></button>}
-          {!archived && task.status === "klar" && <button onClick={() => archiveTask(task.id)} title="Arkivera" className="text-slate-300 hover:text-slate-500"><Archive className="w-3.5 h-3.5" /></button>}
-          <button onClick={() => setConfirmDel(task.id)} className="text-slate-300 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+          {!archived && <button onClick={() => openEdit(task)} className="text-muted-foreground hover:text-primary"><Pencil className="w-3.5 h-3.5" /></button>}
+          {!archived && task.status === "klar" && <button onClick={() => archiveTask(task.id)} title="Arkivera" className="text-muted-foreground hover:text-foreground"><Archive className="w-3.5 h-3.5" /></button>}
+          <button onClick={() => setConfirmDel(task.id)} className="text-muted-foreground hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
         </div>
       </div>
 
       {expanded && (
-        <div className="px-9 pb-4 space-y-3 bg-slate-50/50 dark:bg-slate-700/30">
+        <div className="px-9 pb-4 space-y-3 bg-muted/30">
           {task.description && (
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{task.description}</p>
+            <p className="text-sm text-muted-foreground leading-relaxed">{task.description}</p>
           )}
-          <div className="flex gap-4 text-xs text-slate-400 flex-wrap">
-            {task.assignee && <span>Ansvarig: <span className="text-slate-600 dark:text-slate-300 font-medium">{task.assignee}</span></span>}
+          <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
+            {task.assignee && <span>Ansvarig: <span className="text-foreground font-medium">{task.assignee}</span></span>}
             <span>Skapad: {task.created}</span>
             {task.completedDate && <span className="text-emerald-600">Klar: {task.completedDate}</span>}
             {task.isRecurring && <span className="text-amber-600">Återkommande ({task.recurringInterval === "weekly" ? "veckovis" : "månadsvis"})</span>}
           </div>
 
           {(task.comments || []).length > 0 && (
-            <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-700 pt-3">
+            <div className="space-y-1.5 border-t border-border pt-3">
               {task.comments.map((c, i) => (
-                <div key={i} className="text-xs text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-600">
-                  <span className="text-slate-400 mr-2">{c.date}</span>{c.text}
+                <div key={i} className="text-xs text-foreground bg-card rounded-lg px-3 py-2 border border-border">
+                  <span className="text-muted-foreground mr-2">{c.date}</span>{c.text}
                 </div>
               ))}
             </div>
@@ -318,10 +318,10 @@ function TaskRow({ task, expandedId, setExpandedId, moveStatus, cyclePriority, o
                 onChange={e => setCommentText(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && addComment(task.id)}
                 placeholder="Lägg till en uppdatering..."
-                className="flex-1 text-xs border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-200 dark:bg-slate-800"
+                className="flex-1 text-xs border border-border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary/20 bg-card text-foreground"
               />
               <button onClick={() => addComment(task.id)}
-                className="text-xs bg-amber-500 text-white px-3 py-1.5 rounded-lg hover:bg-amber-600 transition-colors">
+                className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors">
                 Lägg till
               </button>
             </div>

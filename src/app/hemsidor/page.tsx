@@ -49,9 +49,9 @@ export default function HemsidorPage() {
   const sharedProps = { clients, setClients, leads, setLeads, tasks, setTasks, addActivity, showToast, setTab }
 
   return (
-    <div className="p-6 md:p-8 min-h-screen bg-slate-50 dark:bg-background">
+    <div className="p-6 md:p-8 min-h-screen bg-background">
       {/* Tab bar */}
-      <div className="flex gap-1 mb-8 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-1.5 overflow-x-auto">
+      <div className="flex gap-1 mb-8 bg-card border border-border rounded-2xl p-1.5 overflow-x-auto">
         {TABS.map(t => {
           const badge = badges[t.id]
           return (
@@ -60,14 +60,14 @@ export default function HemsidorPage() {
               onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
                 tab === t.id
-                  ? "bg-amber-500 text-white shadow-sm"
-                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted/60"
               }`}
             >
               {t.label}
               {badge != null && badge > 0 && (
                 <span className={`text-xs rounded-full min-w-5 h-5 px-1 flex items-center justify-center ${
-                  tab === t.id ? "bg-white/30 text-white" : "bg-amber-100 text-amber-700"
+                  tab === t.id ? "bg-white/30 text-white" : "bg-primary/10 text-primary"
                 }`}>
                   {badge}
                 </span>
