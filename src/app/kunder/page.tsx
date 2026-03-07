@@ -153,7 +153,7 @@ export default function KunderPage() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-3 sm:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -207,8 +207,8 @@ export default function KunderPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      {/* Table — desktop */}
+      <div className="hidden md:block rounded-2xl border border-border bg-card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40">
@@ -293,6 +293,43 @@ export default function KunderPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Card list — mobile */}
+      <div className="md:hidden space-y-2">
+        {filtered.length === 0 ? (
+          <p className="text-center text-sm text-muted-foreground py-10">Inga kunder matchade sökningen</p>
+        ) : filtered.map(c => (
+          <div
+            key={c.id}
+            onClick={() => router.push(`/kunder/${c.id}`)}
+            className="rounded-xl border border-border bg-card p-3 space-y-2 cursor-pointer active:bg-muted/30"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-sm text-foreground">{c.name}</p>
+                {c.cnt && <p className="text-xs text-muted-foreground">{c.cnt}</p>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {c.st && (
+                  <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium", statusClass(c.st))}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    {statusLabel(c.st)}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              {c.pkg && (
+                <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", paketClass(c.pkg))}>
+                  {c.pkg}
+                </span>
+              )}
+              <TeamCluster vg={c.vg} ed={c.ed} cc={c.cc} />
+              {c.nr && <span className="text-xs text-muted-foreground">Nästa: {c.nr}</span>}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Add/Edit Modal */}

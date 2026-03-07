@@ -1,6 +1,14 @@
 export type TaskStatus = "not_started" | "in_progress" | "done" | "blocked"
 export type TaskPriority = "low" | "medium" | "high" | ""
 
+export interface TaskNote {
+  id: string
+  author: string
+  text: string
+  mentions: string[]
+  createdAt: string
+}
+
 export interface Task {
   id: number
   title: string
@@ -12,6 +20,7 @@ export interface Task {
   status: TaskStatus
   priority: TaskPriority
   createdAt: string
+  notes?: TaskNote[]
 }
 
 export const TASKS_KEY = "tasks-v1"
@@ -48,6 +57,7 @@ export function loadTasks(): Task[] {
       status: (t.status as TaskStatus) ?? (t.done ? "done" : "not_started"),
       priority: (t.priority as TaskPriority) ?? "",
       createdAt: t.createdAt ?? new Date().toISOString(),
+      notes: t.notes ?? [],
     }))
   } catch { return [] }
 }

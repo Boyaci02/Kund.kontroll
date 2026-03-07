@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useDB } from "@/lib/store"
 import { useAuth } from "@/components/providers/AuthProvider"
 import { TEAM_FARGER } from "@/lib/types"
-import { Search } from "lucide-react"
+import { Search, Menu } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 function getGreeting(): string {
@@ -26,7 +26,7 @@ function formatDate(): string {
   })
 }
 
-export function Topbar() {
+export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter()
   const { db } = useDB()
   const { user } = useAuth()
@@ -58,9 +58,18 @@ export function Topbar() {
   const greeting = `${getGreeting()}, ${user?.name ?? ""}!`
 
   return (
-    <div className="sticky top-0 z-30 flex items-center justify-between px-8 py-3 border-b border-border bg-background/80 backdrop-blur-sm gap-4">
+    <div className="sticky top-0 z-30 flex items-center justify-between px-4 sm:px-8 py-3 border-b border-border bg-background/80 backdrop-blur-sm gap-3">
+      {/* Hamburger — mobile only */}
+      <button
+        onClick={onMenuClick}
+        className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
+        aria-label="Öppna meny"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
       {/* Left: greeting + date */}
-      <div className="min-w-0">
+      <div className="min-w-0 hidden sm:block">
         <p className="text-sm font-semibold text-foreground truncate">{greeting}</p>
         <p className="text-xs text-muted-foreground capitalize">{date}</p>
       </div>

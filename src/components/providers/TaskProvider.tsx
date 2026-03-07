@@ -3,7 +3,7 @@
 import { createContext, useContext, useCallback } from "react"
 import { useSyncedState } from "@/lib/use-synced-state"
 import { TASKS_KEY, loadTasks } from "@/lib/task-types"
-import type { Task, TaskStatus } from "@/lib/task-types"
+import type { Task, TaskNote, TaskStatus } from "@/lib/task-types"
 import { newTaskId } from "@/lib/task-types"
 
 // ── Migration: convert old localStorage format (done/deadline) to new format ──
@@ -22,6 +22,7 @@ function migrateTasks(raw: unknown): Task[] {
     status: (t.status as TaskStatus) ?? (t.done ? "done" : "not_started"),
     priority: t.priority ?? "",
     createdAt: t.createdAt ?? new Date().toISOString(),
+    notes: t.notes ?? [],
   }))
 }
 
@@ -34,6 +35,7 @@ interface TaskContextValue {
   updateTask: (id: number, patch: Partial<Task>) => void
   deleteTask: (id: number) => void
   setTasks: (tasks: Task[]) => void
+  addNote: (taskId: number, note: TaskNote) => void
 }
 
 const TaskContext = createContext<TaskContextValue | null>(null)
@@ -96,8 +98,14 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     setTasksRaw(prev => prev.filter(t => t.id !== id))
   }, [setTasksRaw])
 
+  const addNote = useCallback((taskId: number, note: TaskNote) => {
+    setTasksRaw(prev => prev.map(t =>
+      t.id === taskId ? { ...t, notes: [...(t.notes ?? []), note] } : t
+    ))
+  }, [setTasksRaw])
+
   return (
-    <TaskContext.Provider value={{ tasks, tasksLoading, addTask, updateTask, deleteTask, setTasks }}>
+    <TaskContext.Provider value={{ tasks, tasksLoading, addTask, updateTask, deleteTask, setTasks, addNote }}>
       {children}
     </TaskContext.Provider>
   )

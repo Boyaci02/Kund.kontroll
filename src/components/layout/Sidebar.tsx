@@ -85,7 +85,7 @@ function SubNav({ show, children }: { show: boolean; children: React.ReactNode }
   )
 }
 
-export function Sidebar() {
+export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuth()
@@ -102,12 +102,17 @@ export function Sidebar() {
   }
 
   function handleLogout() {
+    onClose?.()
     logout()
     router.push("/login")
   }
 
   return (
-    <aside className="flex h-screen w-60 flex-col border-r border-border bg-sidebar fixed left-0 top-0 z-40">
+    <aside className={cn(
+      "flex h-screen w-60 flex-col border-r border-border bg-sidebar fixed left-0 top-0 z-50 transition-transform duration-200",
+      "md:translate-x-0",
+      open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+    )}>
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-4 py-5 border-b border-border">
         <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary">

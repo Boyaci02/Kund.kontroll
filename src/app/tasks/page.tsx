@@ -1,16 +1,18 @@
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from "react"
+import Link from "next/link"
 import { useDB } from "@/lib/store"
 import { useTask } from "@/components/providers/TaskProvider"
 import { newTaskId, STATUS_LABELS, STATUS_COLORS } from "@/lib/task-types"
 import type { Task, TaskStatus, TaskPriority } from "@/lib/task-types"
 import { TEAM_MEDLEMMAR, TEAM_FARGER } from "@/lib/types"
 import { useAuth } from "@/components/providers/AuthProvider"
+import { OB_STEG } from "@/lib/data"
 import { cn } from "@/lib/utils"
 import {
   Plus, ChevronDown, ChevronRight, MoreHorizontal, Check,
-  X, Filter, Users, Globe, List, Search,
+  X, Filter, Users, Globe, List, Search, CheckSquare,
 } from "lucide-react"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -33,12 +35,22 @@ interface ActiveFilters {
 }
 
 const STATUS_OPTIONS: TaskStatus[] = ["not_started", "in_progress", "done", "blocked"]
+const OB_STATUS_OPTIONS: TaskStatus[] = ["not_started", "done"]
+
+// ── OB task helpers ────────────────────────────────────────────────────────────
+
+function parseOBTask(task: Task): { kundId: number; obTaskId: string; stepTitle: string } | null {
+  if (!task.description.startsWith("__OB__:")) return null
+  const parts = task.description.slice(7).split(":")
+  return { kundId: Number(parts[0]), obTaskId: parts[1], stepTitle: parts.slice(2).join(":") }
+}
 
 // ── Status dropdown (inline) ──────────────────────────────────────────────────
 
-function StatusDropdown({ status, onChange }: {
+function StatusDropdown({ status, onChange, obTask }: {
   status: TaskStatus
   onChange: (v: TaskStatus) => void
+  obTask?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -65,7 +77,7 @@ function StatusDropdown({ status, onChange }: {
       </button>
       {open && (
         <div className="absolute z-50 top-full left-0 mt-1 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[140px]">
-          {STATUS_OPTIONS.map(s => (
+          {(obTask ? OB_STATUS_OPTIONS : STATUS_OPTIONS).map(s => (
             <button
               key={s}
               onClick={() => { onChange(s); setOpen(false) }}
@@ -286,7 +298,7 @@ function TableHead({ sortKey, sortDir, onSort, showAssignee }: {
 
 // ── Task row ──────────────────────────────────────────────────────────────────
 
-function TaskRow({ task, kundName, showAssignee, onStatusChange, onEdit, onDuplicate, onDelete }: {
+function TaskRow({ task, kundName, showAssignee, onStatusChange, onEdit, onDuplicate, onDelete, isOB }: {
   task: Task
   kundName: string
   showAssignee: boolean
@@ -294,9 +306,11 @@ function TaskRow({ task, kundName, showAssignee, onStatusChange, onEdit, onDupli
   onEdit: () => void
   onDuplicate: () => void
   onDelete: () => void
+  isOB?: boolean
 }) {
   const color = TEAM_FARGER[task.assignee] ?? "#9CA3AF"
   const isOverdue = task.status !== "done" && !!task.endDate && new Date(task.endDate + "T23:59:59") < new Date()
+  const obMeta = isOB ? parseOBTask(task) : null
 
   function fmt(d: string) {
     if (!d) return ""
@@ -306,15 +320,31 @@ function TaskRow({ task, kundName, showAssignee, onStatusChange, onEdit, onDupli
   return (
     <tr className="group border-b border-border/40 hover:bg-muted/20 transition-colors">
       <td className="px-4 py-3 min-w-[180px]">
-        <button
-          onClick={onEdit}
-          className="text-sm font-medium text-foreground hover:text-primary text-left transition-colors"
-        >
-          {task.title || <span className="italic text-muted-foreground text-xs">Utan titel</span>}
-        </button>
+        <div className="flex items-center gap-2">
+          {isOB && (
+            <span className="flex items-center gap-0.5 text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full shrink-0">
+              <CheckSquare className="w-2.5 h-2.5" />
+              OB
+            </span>
+          )}
+          {isOB ? (
+            <span className="text-sm font-medium text-foreground">
+              {task.title}
+            </span>
+          ) : (
+            <Link
+              href={`/tasks/${task.id}`}
+              className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+            >
+              {task.title || <span className="italic text-muted-foreground text-xs">Utan titel</span>}
+            </Link>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3 max-w-[200px]">
-        <span className="text-xs text-muted-foreground truncate block">{task.description || "—"}</span>
+        <span className="text-xs text-muted-foreground truncate block">
+          {isOB ? (obMeta?.stepTitle ?? "Onboarding") : (task.description || "—")}
+        </span>
       </td>
       <td className="px-4 py-3 min-w-[120px]">
         {kundName ? (
@@ -338,7 +368,7 @@ function TaskRow({ task, kundName, showAssignee, onStatusChange, onEdit, onDupli
         </span>
       </td>
       <td className="px-4 py-3">
-        <StatusDropdown status={task.status} onChange={onStatusChange} />
+        <StatusDropdown status={task.status} onChange={onStatusChange} obTask={isOB} />
       </td>
       {showAssignee && (
         <td className="px-4 py-3">
@@ -358,9 +388,62 @@ function TaskRow({ task, kundName, showAssignee, onStatusChange, onEdit, onDupli
         </td>
       )}
       <td className="px-2 py-3">
-        <ActionsMenu onEdit={onEdit} onDuplicate={onDuplicate} onDelete={onDelete} />
+        {!isOB && <ActionsMenu onEdit={onEdit} onDuplicate={onDuplicate} onDelete={onDelete} />}
       </td>
     </tr>
+  )
+}
+
+// ── Mobile task card ──────────────────────────────────────────────────────────
+
+function TaskCard({ task, kundName, onStatusChange, isOB }: {
+  task: Task
+  kundName: string
+  onStatusChange: (s: TaskStatus) => void
+  isOB?: boolean
+}) {
+  const color = TEAM_FARGER[task.assignee] ?? "#9CA3AF"
+  const isOverdue = task.status !== "done" && !!task.endDate && new Date(task.endDate + "T23:59:59") < new Date()
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+          {isOB && (
+            <span className="flex items-center gap-0.5 text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full shrink-0">
+              <CheckSquare className="w-2.5 h-2.5" />
+              OB
+            </span>
+          )}
+          {isOB ? (
+            <span className="text-sm font-medium text-foreground truncate">{task.title}</span>
+          ) : (
+            <Link href={`/tasks/${task.id}`} className="text-sm font-semibold text-foreground hover:text-primary truncate transition-colors">
+              {task.title || <span className="italic text-muted-foreground text-xs">Utan titel</span>}
+            </Link>
+          )}
+        </div>
+        <StatusDropdown status={task.status} onChange={onStatusChange} obTask={isOB} />
+      </div>
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        {task.assignee && (
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white shrink-0" style={{ background: color }}>
+              {task.assignee[0]}
+            </div>
+            <span>{task.assignee}</span>
+          </div>
+        )}
+        {kundName && (
+          <span className="truncate">{kundName}</span>
+        )}
+        {task.endDate && (
+          <span className={cn("whitespace-nowrap", isOverdue && "text-red-500 font-semibold")}>
+            {task.endDate}
+          </span>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -422,6 +505,7 @@ function EmployeeGroup({ name, tasks, clients, onStatusChange, onEdit, onDuplica
                 </tr>
               ) : tasks.map(t => {
                 const kundName = clients.find(c => c.id === t.kundId)?.name ?? ""
+                const isOB = t.description.startsWith("__OB__:")
                 return (
                   <TaskRow
                     key={t.id}
@@ -432,6 +516,7 @@ function EmployeeGroup({ name, tasks, clients, onStatusChange, onEdit, onDuplica
                     onEdit={() => onEdit(t)}
                     onDuplicate={() => onDuplicate(t)}
                     onDelete={() => onDelete(t.id)}
+                    isOB={isOB}
                   />
                 )
               })}
@@ -454,7 +539,7 @@ function EmployeeGroup({ name, tasks, clients, onStatusChange, onEdit, onDuplica
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
-  const { db, addNotification, markPageRead } = useDB()
+  const { db, addNotification, markPageRead, toggleTask } = useDB()
   const { user } = useAuth()
   const { tasks, setTasks } = useTask()
 
@@ -462,6 +547,34 @@ export default function TasksPage() {
     if (user?.name) markPageRead("tasks", user.name)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // ── Virtual OB tasks (computed from obState, not stored separately) ─────────
+  const obVirtualTasks = useMemo<Task[]>(() => {
+    const result: Task[] = []
+    db.clients.filter(c => c.st === "AKTIV").forEach(client => {
+      let localIdx = 0
+      OB_STEG.forEach(step => {
+        step.tasks.forEach(task => {
+          const isDone = (db.obState[client.id] ?? {})[task.id] ?? false
+          result.push({
+            id: client.id * 100_000 + localIdx,
+            title: task.text,
+            description: `__OB__:${client.id}:${task.id}:Steg ${step.n}: ${step.title}`,
+            assignee: task.who,
+            kundId: client.id,
+            startDate: "",
+            endDate: "",
+            status: isDone ? "done" : "not_started",
+            priority: "",
+            createdAt: "",
+          })
+          localIdx++
+        })
+      })
+    })
+    return result
+  }, [db.clients, db.obState])
+
   const [view, setView] = useState<View>("all_tasks")
   const [search, setSearch] = useState("")
   const [dateFilter, setDateFilter] = useState<DateFilter>("all")
@@ -502,6 +615,7 @@ export default function TasksPage() {
   }
 
   function openEditTask(t: Task) {
+    if (parseOBTask(t)) return  // OB tasks are not editable via modal
     setEditingTask({ ...t })
     setModalOpen(true)
   }
@@ -525,6 +639,17 @@ export default function TasksPage() {
   }
 
   function handleStatusChange(id: number, status: TaskStatus) {
+    // OB virtual task — route to toggleTask
+    const obTask = obVirtualTasks.find(t => t.id === id)
+    if (obTask) {
+      const meta = parseOBTask(obTask)
+      if (!meta) return
+      const currentDone = (db.obState[meta.kundId] ?? {})[meta.obTaskId] ?? false
+      const wantDone = status === "done"
+      if (currentDone !== wantDone) toggleTask(meta.kundId, meta.obTaskId)
+      return
+    }
+    // Regular task
     const task = tasks.find(t => t.id === id)
     persist(tasks.map(t => t.id === id ? { ...t, status } : t))
     if (status === "done" && task && task.status !== "done" && user?.name) {
@@ -539,10 +664,12 @@ export default function TasksPage() {
   }
 
   function handleDuplicate(t: Task) {
+    if (parseOBTask(t)) return  // OB tasks cannot be duplicated
     persist([...tasks, { ...t, id: newTaskId(), title: `${t.title} (kopia)`, createdAt: new Date().toISOString() }])
   }
 
   function handleDelete(id: number) {
+    if (obVirtualTasks.some(t => t.id === id)) return  // OB tasks cannot be deleted
     persist(tasks.filter(t => t.id !== id))
   }
 
@@ -553,7 +680,7 @@ export default function TasksPage() {
   // ── Filtering + sorting ───────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
-    let result = [...tasks]
+    let result = [...tasks, ...obVirtualTasks]
 
     if (view === "all_clients") result = result.filter(t => t.kundId !== null)
 
@@ -561,7 +688,6 @@ export default function TasksPage() {
       const q = search.toLowerCase()
       result = result.filter(t =>
         t.title.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q) ||
         (clients.find(c => c.id === t.kundId)?.name ?? "").toLowerCase().includes(q)
       )
     }
@@ -613,7 +739,7 @@ export default function TasksPage() {
     })
 
     return result
-  }, [tasks, view, search, dateFilter, customStart, customEnd, activeFilters, sortKey, sortDir, clients])
+  }, [tasks, obVirtualTasks, view, search, dateFilter, customStart, customEnd, activeFilters, sortKey, sortDir, clients])
 
   const hasActiveFilters = activeFilters.employees.length + activeFilters.clients.length + activeFilters.statuses.length > 0
   const members = TEAM_MEDLEMMAR.filter(m => m !== "Ingen")
@@ -622,7 +748,7 @@ export default function TasksPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <main className="min-h-screen bg-background p-6">
+    <main className="min-h-screen bg-background p-3 sm:p-6">
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
@@ -854,75 +980,140 @@ export default function TasksPage() {
           {members.map(member => {
             const memberTasks = filtered.filter(t => t.assignee === member)
             return (
-              <EmployeeGroup
-                key={member}
-                name={member}
-                tasks={memberTasks}
-                clients={clients}
-                onStatusChange={handleStatusChange}
-                onEdit={openEditTask}
-                onDuplicate={handleDuplicate}
-                onDelete={handleDelete}
-                onAddTask={() => openNewTask(member)}
-                sortKey={sortKey}
-                sortDir={sortDir}
-                onSort={handleSort}
-              />
+              <div key={member}>
+                {/* Desktop */}
+                <div className="hidden md:block">
+                  <EmployeeGroup
+                    name={member}
+                    tasks={memberTasks}
+                    clients={clients}
+                    onStatusChange={handleStatusChange}
+                    onEdit={openEditTask}
+                    onDuplicate={handleDuplicate}
+                    onDelete={handleDelete}
+                    onAddTask={() => openNewTask(member)}
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
+                </div>
+                {/* Mobile */}
+                {memberTasks.length > 0 && (
+                  <div className="md:hidden mb-4">
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: TEAM_FARGER[member] ?? "#9CA3AF" }}>{member[0]}</div>
+                      <span className="text-sm font-semibold text-foreground">{member}</span>
+                      <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{memberTasks.length}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {memberTasks.map(t => (
+                        <TaskCard
+                          key={t.id}
+                          task={t}
+                          kundName={clients.find(c => c.id === t.kundId)?.name ?? ""}
+                          onStatusChange={s => handleStatusChange(t.id, s)}
+                          isOB={t.description.startsWith("__OB__:")}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )
           })}
           {unassigned.length > 0 && (
-            <EmployeeGroup
-              name="Ej tilldelad"
-              tasks={unassigned}
-              clients={clients}
-              onStatusChange={handleStatusChange}
-              onEdit={openEditTask}
-              onDuplicate={handleDuplicate}
-              onDelete={handleDelete}
-              onAddTask={() => openNewTask()}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={handleSort}
-            />
+            <>
+              <div className="hidden md:block">
+                <EmployeeGroup
+                  name="Ej tilldelad"
+                  tasks={unassigned}
+                  clients={clients}
+                  onStatusChange={handleStatusChange}
+                  onEdit={openEditTask}
+                  onDuplicate={handleDuplicate}
+                  onDelete={handleDelete}
+                  onAddTask={() => openNewTask()}
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+              </div>
+              <div className="md:hidden mb-4">
+                <p className="text-sm font-semibold text-muted-foreground mb-2 px-1">Ej tilldelad</p>
+                <div className="space-y-2">
+                  {unassigned.map(t => (
+                    <TaskCard
+                      key={t.id}
+                      task={t}
+                      kundName={clients.find(c => c.id === t.kundId)?.name ?? ""}
+                      onStatusChange={s => handleStatusChange(t.id, s)}
+                      isOB={t.description.startsWith("__OB__:")}
+                    />
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </div>
       ) : (
-        <div className="rounded-xl border border-border overflow-hidden">
-          <table className="w-full text-sm">
-            <TableHead sortKey={sortKey} sortDir={sortDir} onSort={handleSort} showAssignee />
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-14 text-center text-xs text-muted-foreground">
-                    {tasks.length === 0 ? "Inga tasks ännu — skapa den första!" : "Inga tasks matchar filtret"}
-                  </td>
-                </tr>
-              ) : filtered.map(t => {
-                const kundName = clients.find(c => c.id === t.kundId)?.name ?? ""
-                return (
-                  <TaskRow
-                    key={t.id}
-                    task={t}
-                    kundName={kundName}
-                    showAssignee
-                    onStatusChange={s => handleStatusChange(t.id, s)}
-                    onEdit={() => openEditTask(t)}
-                    onDuplicate={() => handleDuplicate(t)}
-                    onDelete={() => handleDelete(t.id)}
-                  />
-                )
-              })}
-            </tbody>
-          </table>
-          <div className="border-t border-border px-4 py-2 bg-muted/10">
-            <button
-              onClick={() => openNewTask()}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg px-2 py-1.5 transition-colors"
-            >
-              <Plus className="w-3 h-3" /> Ny task
-            </button>
+        <>
+          {/* Desktop table */}
+          <div className="hidden md:block rounded-xl border border-border overflow-hidden">
+            <table className="w-full text-sm">
+              <TableHead sortKey={sortKey} sortDir={sortDir} onSort={handleSort} showAssignee />
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-14 text-center text-xs text-muted-foreground">
+                      {tasks.length === 0 ? "Inga tasks ännu — skapa den första!" : "Inga tasks matchar filtret"}
+                    </td>
+                  </tr>
+                ) : filtered.map(t => {
+                  const kundName = clients.find(c => c.id === t.kundId)?.name ?? ""
+                  const isOB = t.description.startsWith("__OB__:")
+                  return (
+                    <TaskRow
+                      key={t.id}
+                      task={t}
+                      kundName={kundName}
+                      showAssignee
+                      onStatusChange={s => handleStatusChange(t.id, s)}
+                      onEdit={() => openEditTask(t)}
+                      onDuplicate={() => handleDuplicate(t)}
+                      onDelete={() => handleDelete(t.id)}
+                      isOB={isOB}
+                    />
+                  )
+                })}
+              </tbody>
+            </table>
+            <div className="border-t border-border px-4 py-2 bg-muted/10">
+              <button
+                onClick={() => openNewTask()}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg px-2 py-1.5 transition-colors"
+              >
+                <Plus className="w-3 h-3" /> Ny task
+              </button>
+            </div>
           </div>
-        </div>
+
+          {/* Mobile card list */}
+          <div className="md:hidden space-y-2">
+            {filtered.length === 0 ? (
+              <p className="text-center text-xs text-muted-foreground py-10">
+                {tasks.length === 0 ? "Inga tasks ännu — skapa den första!" : "Inga tasks matchar filtret"}
+              </p>
+            ) : filtered.map(t => (
+              <TaskCard
+                key={t.id}
+                task={t}
+                kundName={clients.find(c => c.id === t.kundId)?.name ?? ""}
+                onStatusChange={s => handleStatusChange(t.id, s)}
+                isOB={t.description.startsWith("__OB__:")}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       <TaskModal
