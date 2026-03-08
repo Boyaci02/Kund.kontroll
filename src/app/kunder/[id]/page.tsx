@@ -326,7 +326,7 @@ export default function KundkortPage() {
   }
 
   return (
-    <div className="p-6 md:p-8 space-y-5 max-w-6xl">
+    <div className="p-6 md:p-8 space-y-5">
 
       {/* ── Header ── */}
       <div className="flex items-start justify-between gap-4">
