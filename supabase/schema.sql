@@ -63,6 +63,21 @@ create table if not exists claude_leads (
 alter table claude_tasks disable row level security;
 alter table claude_leads disable row level security;
 
+-- =====================
+-- KUNDFILER (dokument, avtal, PDF:er per kund)
+-- =====================
+-- Metadata-tabell — själva filerna lagras i Supabase Storage (bucket: kund-filer)
+create table if not exists customer_files (
+  id          uuid        default gen_random_uuid() primary key,
+  kund_id     integer     not null,
+  name        text        not null,
+  path        text        not null,
+  size        integer,
+  uploaded_at timestamptz default now()
+);
+
+alter table customer_files disable row level security;
+
 -- Auto-update updated_at trigger (delas av claude_tasks och claude_leads)
 create or replace function update_updated_at()
 returns trigger as $$

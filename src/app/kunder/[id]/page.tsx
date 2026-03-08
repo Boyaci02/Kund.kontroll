@@ -42,7 +42,13 @@ import {
   MapPin,
   User,
   Trash2,
+  FileText,
+  Image,
+  File,
+  Upload,
+  Download,
 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 import { newRow } from "@/lib/editor-types"
 import type { EditorRow } from "@/lib/editor-types"
 import EditorPipelineTable from "@/components/editor/EditorPipelineTable"
@@ -165,6 +171,161 @@ function TaskModal({ open, initial, onSave, onClose }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ── Customer files ────────────────────────────────────────────────────────────
+
+const BUCKET = "kund-filer"
+
+interface CustomerFile {
+  id: string
+  kund_id: number
+  name: string
+  path: string
+  size: number | null
+  uploaded_at: string
+}
+
+function fileIcon(name: string) {
+  const ext = name.split(".").pop()?.toLowerCase()
+  if (ext === "pdf") return <FileText className="h-4 w-4 text-red-500 shrink-0" />
+  if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext ?? ""))
+    return <Image className="h-4 w-4 text-blue-500 shrink-0" />
+  return <File className="h-4 w-4 text-muted-foreground shrink-0" />
+}
+
+function fmtSize(bytes: number | null) {
+  if (!bytes) return ""
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function CustomerFiles({ kundId }: { kundId: number }) {
+  const [files, setFiles] = useState<CustomerFile[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { loadFiles() }, [kundId])
+
+  async function loadFiles() {
+    const { data } = await supabase
+      .from("customer_files")
+      .select("*")
+      .eq("kund_id", kundId)
+      .order("uploaded_at", { ascending: false })
+    if (data) setFiles(data as CustomerFile[])
+  }
+
+  async function handleFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return
+    setUploading(true)
+    for (const file of Array.from(fileList)) {
+      const path = `${kundId}/${Date.now()}-${file.name}`
+      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file)
+      if (upErr) { toast.error(`Kunde inte ladda upp ${file.name}`); continue }
+      const { error: dbErr } = await supabase.from("customer_files").insert({
+        kund_id: kundId, name: file.name, path, size: file.size,
+      })
+      if (dbErr) toast.error("Sparning av filinfo misslyckades")
+    }
+    await loadFiles()
+    setUploading(false)
+    toast.success(fileList.length > 1 ? `${fileList.length} filer uppladdade` : "Fil uppladdad")
+  }
+
+  async function openFile(path: string) {
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600)
+    if (error || !data) { toast.error("Kunde inte öppna filen"); return }
+    window.open(data.signedUrl, "_blank")
+  }
+
+  async function deleteFile(file: CustomerFile) {
+    if (!confirm(`Ta bort "${file.name}"?`)) return
+    await supabase.storage.from(BUCKET).remove([file.path])
+    await supabase.from("customer_files").delete().eq("id", file.id)
+    setFiles(f => f.filter(x => x.id !== file.id))
+    toast.success("Fil borttagen")
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Filer & Dokument
+        </h2>
+        <button
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          {uploading ? "Laddar upp..." : "Ladda upp"}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp"
+          className="hidden"
+          onChange={e => handleFiles(e.target.files)}
+        />
+      </div>
+
+      {/* Drop zone + file list */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files) }}
+        className={cn("transition-colors", dragging && "bg-primary/5")}
+      >
+        {files.length === 0 ? (
+          <div
+            onClick={() => inputRef.current?.click()}
+            className="px-5 py-8 flex flex-col items-center gap-2 cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Upload className="h-6 w-6 opacity-40" />
+            <p className="text-xs">Dra och släpp filer här, eller klicka för att välja</p>
+            <p className="text-[10px] opacity-60">PDF, Word, Excel, bilder</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/40">
+            {files.map(f => (
+              <div key={f.id} className="group flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors">
+                {fileIcon(f.name)}
+                <span className="flex-1 text-sm text-foreground truncate">{f.name}</span>
+                {f.size && <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{fmtSize(f.size)}</span>}
+                <span className="text-xs text-muted-foreground shrink-0 hidden sm:block">
+                  {new Date(f.uploaded_at).toLocaleDateString("sv-SE", { day: "numeric", month: "short", year: "numeric" })}
+                </span>
+                <button
+                  onClick={() => openFile(f.path)}
+                  className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                  title="Öppna fil"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => deleteFile(f)}
+                  className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-red-500 transition-all"
+                  title="Ta bort"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+            <div
+              onClick={() => inputRef.current?.click()}
+              className="px-5 py-2.5 flex items-center gap-2 cursor-pointer text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+            >
+              <Plus className="h-3 w-3" /> Lägg till fler filer
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -833,6 +994,9 @@ export default function KundkortPage() {
           </>
         )}
       </div>
+
+      {/* ── Filer & Dokument ── */}
+      <CustomerFiles kundId={id} />
 
       {/* ── Task Modal ── */}
       <TaskModal
