@@ -8,13 +8,12 @@ export async function POST(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  webpush.setVapidDetails(
-    process.env.VAPID_EMAIL!,
-    process.env.VAPID_PUBLIC_KEY!,
-    process.env.VAPID_PRIVATE_KEY!
-  )
-
   try {
+    webpush.setVapidDetails(
+      process.env.VAPID_EMAIL!,
+      process.env.VAPID_PUBLIC_KEY!,
+      process.env.VAPID_PRIVATE_KEY!
+    )
     const { teamMember, title, body, url } = await req.json() as {
       teamMember: string
       title: string
