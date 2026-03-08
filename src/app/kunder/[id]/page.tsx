@@ -41,6 +41,7 @@ import {
   Mail,
   MapPin,
   User,
+  Trash2,
 } from "lucide-react"
 import { newRow } from "@/lib/editor-types"
 import type { EditorRow } from "@/lib/editor-types"
@@ -52,8 +53,120 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import type { Kund, Paket, Status } from "@/lib/types"
 import { TEAM_MEDLEMMAR, PAKET_LISTA } from "@/lib/types"
+import type { Task, TaskStatus, TaskPriority } from "@/lib/task-types"
+import { STATUS_LABELS } from "@/lib/task-types"
 
 const NONE = "__none__"
+
+// ── Task modal ────────────────────────────────────────────────────────────────
+
+const TASK_EMPTY: Omit<Task, "id" | "createdAt"> = {
+  title: "", description: "", assignee: "", kundId: null,
+  startDate: "", endDate: "", status: "not_started", priority: "",
+}
+
+const STATUS_OPTIONS: TaskStatus[] = ["not_started", "in_progress", "done", "blocked"]
+
+function TaskModal({ open, initial, onSave, onClose }: {
+  open: boolean
+  initial: Partial<Task> | null
+  onSave: (t: Omit<Task, "id" | "createdAt">) => void
+  onClose: () => void
+}) {
+  const [form, setForm] = useState<Omit<Task, "id" | "createdAt">>(TASK_EMPTY)
+
+  useEffect(() => {
+    if (open) setForm({ ...TASK_EMPTY, ...initial })
+  }, [open, initial])
+
+  function save() {
+    if (!form.title.trim()) return
+    onSave(form)
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{initial?.id ? "Redigera uppgift" : "Ny uppgift"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Titel *</label>
+            <Input
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="Uppgiftens namn..."
+              autoFocus
+              onKeyDown={e => e.key === "Enter" && save()}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Beskrivning</label>
+            <Textarea
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Kort beskrivning..."
+              rows={3}
+              className="resize-none text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Ansvarig</label>
+              <select
+                value={form.assignee}
+                onChange={e => setForm(f => ({ ...f, assignee: e.target.value }))}
+                className="w-full text-sm rounded-lg px-3 py-2 border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="">Ingen</option>
+                {TEAM_MEDLEMMAR.filter(m => m !== "Ingen").map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Prioritet</label>
+              <select
+                value={form.priority}
+                onChange={e => setForm(f => ({ ...f, priority: e.target.value as TaskPriority }))}
+                className="w-full text-sm rounded-lg px-3 py-2 border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="">Ingen prioritet</option>
+                <option value="low">Låg</option>
+                <option value="medium">Medium</option>
+                <option value="high">Hög</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Startdatum</label>
+              <Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Slutdatum</label>
+              <Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</label>
+            <select
+              value={form.status}
+              onChange={e => setForm(f => ({ ...f, status: e.target.value as TaskStatus }))}
+              className="w-full text-sm rounded-lg px-3 py-2 border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+            </select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Avbryt</Button>
+          <Button onClick={save} disabled={!form.title.trim()}>Spara</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 // ── Team avatar + role-edit popup ─────────────────────────────────────────────
 
@@ -236,8 +349,10 @@ export default function KundkortPage() {
   const [notes, setNotes] = useState(kund?.notes ?? "")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editOpen, setEditOpen] = useState(false)
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<Partial<Task> | null>(null)
   const { getClientRows, updateClientRows } = useEp()
-  const { tasks, addTask, updateTask } = useTask()
+  const { tasks, addTask, updateTask, deleteTask } = useTask()
   const epRows = getClientRows(id)
   const kundTaskList = tasks.filter(t => t.kundId === id)
   const { cfState } = useCf()
@@ -266,8 +381,24 @@ export default function KundkortPage() {
   )
   const [contentMonthIdx, setContentMonthIdx] = useState(defaultMonthIdx < 0 ? 0 : defaultMonthIdx)
 
-  function addKundTask() {
-    addTask({ kundId: id, status: "not_started" })
+  function openNewTask() {
+    setEditingTask({ kundId: id, status: "not_started" })
+    setTaskModalOpen(true)
+  }
+
+  function openEditTask(t: Task) {
+    setEditingTask(t)
+    setTaskModalOpen(true)
+  }
+
+  function handleTaskSave(form: Omit<Task, "id" | "createdAt">) {
+    if (editingTask?.id) {
+      updateTask(editingTask.id, form)
+      toast.success("Uppgift uppdaterad")
+    } else {
+      addTask({ ...form, kundId: id })
+      toast.success("Uppgift skapad")
+    }
   }
 
   function toggleKundTask(taskId: number) {
@@ -463,7 +594,7 @@ export default function KundkortPage() {
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Uppgifter</h2>
             <div className="flex items-center gap-3">
               <button
-                onClick={addKundTask}
+                onClick={openNewTask}
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Plus className="w-3 h-3" /> Lägg till
@@ -475,7 +606,7 @@ export default function KundkortPage() {
           {kundTaskList.length === 0 ? (
             <div className="px-5 pb-5 text-center text-xs text-muted-foreground">
               Inga uppgifter —{" "}
-              <button onClick={addKundTask} className="text-primary hover:underline">lägg till en</button>
+              <button onClick={openNewTask} className="text-primary hover:underline">lägg till en</button>
             </div>
           ) : (
             <div className="divide-y divide-border/40 pb-2">
@@ -485,7 +616,7 @@ export default function KundkortPage() {
                 const overdue = !isDone && !!dueDate && new Date(dueDate + "T23:59:59") < new Date()
                 const color = TEAM_FARGER[t.assignee] ?? "#9CA3AF"
                 return (
-                  <div key={t.id} className="flex items-center gap-3 px-5 py-2.5">
+                  <div key={t.id} className="group flex items-center gap-3 px-5 py-2.5 hover:bg-muted/30 transition-colors">
                     <button
                       onClick={() => toggleKundTask(t.id)}
                       className={cn(
@@ -495,9 +626,12 @@ export default function KundkortPage() {
                     >
                       {isDone && <span className="text-[8px] font-bold">✓</span>}
                     </button>
-                    <span className={cn("flex-1 text-sm text-foreground truncate", isDone && "line-through opacity-40")}>
+                    <button
+                      onClick={() => openEditTask(t)}
+                      className={cn("flex-1 text-sm text-left text-foreground truncate hover:text-primary transition-colors", isDone && "line-through opacity-40")}
+                    >
                       {t.title || <span className="italic text-muted-foreground">Utan titel</span>}
-                    </span>
+                    </button>
                     {t.assignee && (
                       <span
                         className="w-5 h-5 rounded-full flex items-center justify-center text-[0.55rem] font-bold text-white shrink-0"
@@ -512,6 +646,13 @@ export default function KundkortPage() {
                         {new Date(dueDate + "T00:00:00").toLocaleDateString("sv-SE", { day: "numeric", month: "short" })}
                       </span>
                     )}
+                    <button
+                      onClick={() => { if (confirm("Ta bort uppgiften?")) deleteTask(t.id) }}
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-red-500 transition-all shrink-0"
+                      title="Ta bort"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 )
               })}
@@ -692,6 +833,14 @@ export default function KundkortPage() {
           </>
         )}
       </div>
+
+      {/* ── Task Modal ── */}
+      <TaskModal
+        open={taskModalOpen}
+        initial={editingTask}
+        onSave={handleTaskSave}
+        onClose={() => { setTaskModalOpen(false); setEditingTask(null) }}
+      />
 
       {/* ── Edit Modal ── */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
