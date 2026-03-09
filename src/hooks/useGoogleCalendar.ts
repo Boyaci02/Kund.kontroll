@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 
 export interface CalendarEvent {
   id: string
@@ -17,11 +17,16 @@ export interface NewCalendarEvent {
   description?: string
 }
 
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000 // 5 minuter
+
 export function useGoogleCalendar() {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(false)
+  // Track the last month fetched so auto-refresh knows what to re-fetch
+  const activeMonthRef = useRef<Date | null>(null)
 
   const fetchEvents = useCallback(async (month: Date) => {
+    activeMonthRef.current = month
     const year = month.getFullYear()
     const m = month.getMonth()
     const timeMin = new Date(year, m, 1).toISOString()
@@ -40,6 +45,25 @@ export function useGoogleCalendar() {
       setLoading(false)
     }
   }, [])
+
+  // Auto-refresh: every 5 min + on tab focus
+  useEffect(() => {
+    function refresh() {
+      if (activeMonthRef.current) fetchEvents(activeMonthRef.current)
+    }
+
+    const interval = setInterval(refresh, REFRESH_INTERVAL_MS)
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") refresh()
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  }, [fetchEvents])
 
   const createEvent = useCallback(
     async (event: NewCalendarEvent): Promise<boolean> => {
