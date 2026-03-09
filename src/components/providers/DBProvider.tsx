@@ -109,14 +109,16 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // ── Lördag-reset: bokningskontakter = kunder med nr-datum veckan om 2 veckor ─
-      const lastSat = getLastWeekday(6)
-      if (new Date(current.lastWeeklyResetAt ?? 0) < lastSat) {
-        // Veckan 2 kalenderv. framåt: lastSat+9 (mån) → lastSat+15 (sön)
+      // ── Boknings-refresh: kunder med nr-datum 2 veckor framåt (daglig) ─────────
+      const todayMidnight = new Date()
+      todayMidnight.setHours(0, 0, 0, 0)
+
+      if (new Date(current.lastWeeklyResetAt ?? 0) < todayMidnight) {
+        // today+14 (mån om 2 v) → today+20 (sön om 2 v)
         const twoWeeksAhead: Date[] = []
-        for (let i = 9; i <= 15; i++) {
-          const d = new Date(lastSat)
-          d.setDate(lastSat.getDate() + i)
+        for (let i = 14; i <= 20; i++) {
+          const d = new Date(todayMidnight)
+          d.setDate(todayMidnight.getDate() + i)
           twoWeeksAhead.push(d)
         }
 
@@ -137,11 +139,11 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
           contactLog: cleanedLog,
           contacts: [...nonBooking, ...newBookingContacts],
           nextContactId,
-          lastWeeklyResetAt: lastSat.toISOString(),
+          lastWeeklyResetAt: todayMidnight.toISOString(),
         }
-        console.log(`[saturday-reset] ${lastSat.toLocaleDateString("sv-SE")} — ${bookingClients.length} bokningskontakter (nr-datum om 2 v)`)
+        console.log(`[booking-refresh] ${todayMidnight.toLocaleDateString("sv-SE")} — ${bookingClients.length} bokningskontakter (nr-datum om 2 v)`)
       }
-      // ── Slut lördag-reset ─────────────────────────────────────────────────────
+      // ── Slut boknings-refresh ──────────────────────────────────────────────────
 
       // ── Onsdag-reset: SMS-kontakter för inspelningar mån–ons nästa vecka ─────
       const lastWed = getLastWeekday(3)
