@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { ChevronLeft, ChevronRight, CalendarPlus, Camera } from "lucide-react"
+import { ChevronLeft, ChevronRight, CalendarPlus, Camera, ClipboardCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Kund } from "@/lib/types"
 import { TEAM_FARGER } from "@/lib/types"
 import type { CalendarEvent } from "@/hooks/useGoogleCalendar"
+import type { Task } from "@/lib/task-types"
 
 // ─── Swedish month names ──────────────────────────────────────────────────────
 const MONTH_NAMES = [
@@ -20,7 +21,7 @@ const MONTH_MAP: Record<string, number> = {
 }
 
 // ─── Parse the free-text `nr` field into Date[] ───────────────────────────────
-function parseNrDates(nr: string, year: number): Date[] {
+export function parseNrDates(nr: string, year: number): Date[] {
   if (!nr) return []
   const lower = nr.toLowerCase().trim()
   if (["?", "avvakta", "planera inspelning", ""].includes(lower)) return []
@@ -56,16 +57,20 @@ interface CalendarGridProps {
   clients: Kund[]
   googleEvents: CalendarEvent[]
   loading?: boolean
+  tasks?: Task[]
   onMonthChange: (month: Date) => void
   onAddToCalendar?: (kund: Kund, date: Date) => void
+  onDaySelect?: (day: number | null) => void
 }
 
 export function CalendarGrid({
   clients,
   googleEvents,
   loading = false,
+  tasks = [],
   onMonthChange,
   onAddToCalendar,
+  onDaySelect,
 }: CalendarGridProps) {
   const [currentMonth, setCurrentMonth] = useState(() => {
     const d = new Date()
@@ -76,10 +81,15 @@ export function CalendarGrid({
   const year = currentMonth.getFullYear()
   const month = currentMonth.getMonth()
 
+  function selectDay(day: number | null) {
+    setSelectedDay(day)
+    onDaySelect?.(day)
+  }
+
   function navigate(delta: number) {
     const next = new Date(year, month + delta, 1)
     setCurrentMonth(next)
-    setSelectedDay(null)
+    selectDay(null)
     onMonthChange(next)
   }
 
@@ -114,6 +124,26 @@ export function CalendarGrid({
     return map
   }, [googleEvents, year, month])
 
+  // Build day → tasks map (based on endDate YYYY-MM-DD)
+  const tasksByDay = useMemo(() => {
+    const map = new Map<number, Task[]>()
+    const monthStr = String(month + 1).padStart(2, "0")
+    const yearStr = String(year)
+    for (const task of tasks) {
+      if (!task.endDate) continue
+      // endDate format: YYYY-MM-DD
+      const prefix = `${yearStr}-${monthStr}-`
+      if (task.endDate.startsWith(prefix)) {
+        const day = parseInt(task.endDate.slice(8, 10))
+        if (day >= 1 && day <= 31) {
+          if (!map.has(day)) map.set(day, [])
+          map.get(day)!.push(task)
+        }
+      }
+    }
+    return map
+  }, [tasks, year, month])
+
   // Build calendar cells
   const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -128,31 +158,32 @@ export function CalendarGrid({
 
   const selectedClients = selectedDay !== null ? (clientsByDay.get(selectedDay) ?? []) : []
   const selectedEvents = selectedDay !== null ? (eventsByDay.get(selectedDay) ?? []) : []
+  const selectedTasks = selectedDay !== null ? (tasksByDay.get(selectedDay) ?? []) : []
   const selectedDate = selectedDay !== null ? new Date(year, month, selectedDay) : null
 
   return (
     <div>
       {/* Navigation */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-5">
         <button
           onClick={() => navigate(-1)}
-          className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          className="h-9 w-9 flex items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors text-muted-foreground"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span className="text-sm font-semibold text-foreground tracking-wide">
+        <span className="text-base font-bold text-foreground tracking-wide">
           {MONTH_NAMES[month]} {year}
         </span>
         <button
           onClick={() => navigate(1)}
-          className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          className="h-9 w-9 flex items-center justify-center rounded-xl border border-border hover:bg-muted transition-colors text-muted-foreground"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
       {/* Day headers */}
-      <div className="grid grid-cols-7 mb-1">
+      <div className="grid grid-cols-7 mb-1.5">
         {DAY_NAMES.map((d) => (
           <div
             key={d}
@@ -167,36 +198,37 @@ export function CalendarGrid({
       <div className="grid grid-cols-7 gap-0.5">
         {cells.map((day, i) => {
           if (day === null) {
-            return <div key={`pad-${i}`} className="min-h-[52px]" />
+            return <div key={`pad-${i}`} className="min-h-[72px]" />
           }
 
           const kundsOnDay = clientsByDay.get(day) ?? []
           const eventsOnDay = eventsByDay.get(day) ?? []
+          const tasksOnDay = tasksByDay.get(day) ?? []
           const isToday = isCurrentMonth && today.getDate() === day
           const isSelected = selectedDay === day
-          const hasActivity = kundsOnDay.length > 0 || eventsOnDay.length > 0
+          const hasActivity = kundsOnDay.length > 0 || eventsOnDay.length > 0 || tasksOnDay.length > 0
 
           return (
             <button
               key={day}
-              onClick={() => setSelectedDay(isSelected ? null : day)}
+              onClick={() => selectDay(isSelected ? null : day)}
               className={cn(
-                "relative min-h-[52px] rounded-xl p-1.5 text-left transition-all flex flex-col gap-0.5",
+                "relative min-h-[72px] rounded-xl p-1.5 text-left transition-all flex flex-col gap-0.5",
                 isSelected
                   ? "bg-primary/10 ring-1 ring-primary/40"
                   : hasActivity
-                  ? "hover:bg-muted/60"
+                  ? "hover:bg-muted/50"
                   : "hover:bg-muted/30"
               )}
             >
               {/* Date number */}
               <span
                 className={cn(
-                  "text-xs font-semibold leading-none w-5 h-5 flex items-center justify-center rounded-full shrink-0",
+                  "text-xs font-semibold leading-none w-6 h-6 flex items-center justify-center rounded-full shrink-0",
                   isToday
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-1"
                     : isSelected
-                    ? "text-primary"
+                    ? "text-primary font-bold"
                     : hasActivity
                     ? "text-foreground"
                     : "text-muted-foreground"
@@ -207,33 +239,33 @@ export function CalendarGrid({
 
               {/* Activity indicators */}
               {kundsOnDay.length === 1 && (
-                <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded px-0.5 truncate w-full">
+                <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded-md px-0.5 truncate w-full">
                   {kundsOnDay[0].kund.name.split(" ")[0]}
                 </span>
               )}
               {kundsOnDay.length === 2 && (
                 <>
-                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded px-0.5 truncate w-full">
+                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded-md px-0.5 truncate w-full">
                     {kundsOnDay[0].kund.name.split(" ")[0]}
                   </span>
-                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded px-0.5 truncate w-full">
+                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded-md px-0.5 truncate w-full">
                     {kundsOnDay[1].kund.name.split(" ")[0]}
                   </span>
                 </>
               )}
               {kundsOnDay.length >= 3 && (
                 <>
-                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded px-0.5 truncate w-full">
+                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded-md px-0.5 truncate w-full">
                     {kundsOnDay[0].kund.name.split(" ")[0]}
                   </span>
-                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 rounded px-0.5">
+                  <span className="text-[9px] leading-tight font-medium text-amber-600 dark:text-amber-400 rounded-md px-0.5">
                     +{kundsOnDay.length - 1} till
                   </span>
                 </>
               )}
 
-              {/* Google Calendar dot */}
-              {eventsOnDay.length > 0 && (
+              {/* Bottom indicator dots */}
+              {(eventsOnDay.length > 0 || tasksOnDay.length > 0) && (
                 <div className="flex gap-0.5 mt-auto">
                   {eventsOnDay.slice(0, 2).map((e) => (
                     <div
@@ -242,6 +274,12 @@ export function CalendarGrid({
                       title={e.summary}
                     />
                   ))}
+                  {tasksOnDay.length > 0 && (
+                    <div
+                      className="h-1.5 w-1.5 rounded-full bg-violet-500 shrink-0"
+                      title={`${tasksOnDay.length} uppgift${tasksOnDay.length > 1 ? "er" : ""}`}
+                    />
+                  )}
                 </div>
               )}
             </button>
@@ -257,7 +295,7 @@ export function CalendarGrid({
       )}
 
       {/* Legend */}
-      <div className="flex items-center gap-4 mt-3">
+      <div className="flex items-center gap-4 mt-4">
         <div className="flex items-center gap-1.5">
           <div className="h-2 w-3 rounded bg-amber-100 dark:bg-amber-900/30" />
           <span className="text-[10px] text-muted-foreground">Inspelning</span>
@@ -266,11 +304,16 @@ export function CalendarGrid({
           <div className="h-2 w-2 rounded-full bg-primary" />
           <span className="text-[10px] text-muted-foreground">Google Kalender</span>
         </div>
+        <div className="flex items-center gap-1.5">
+          <div className="h-2 w-2 rounded-full bg-violet-500" />
+          <span className="text-[10px] text-muted-foreground">Uppgift</span>
+        </div>
       </div>
 
       {/* Selected day panel */}
-      {selectedDay !== null && selectedDate !== null && (selectedClients.length > 0 || selectedEvents.length > 0) && (
-        <div className="mt-3 rounded-xl border border-border bg-card p-4 space-y-3">
+      {selectedDay !== null && selectedDate !== null &&
+        (selectedClients.length > 0 || selectedEvents.length > 0 || selectedTasks.length > 0) && (
+        <div className="mt-4 rounded-xl border border-border bg-card p-4 space-y-3">
           {/* Date heading */}
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center shrink-0">
@@ -336,6 +379,24 @@ export function CalendarGrid({
             </div>
           )}
 
+          {/* Tasks */}
+          {selectedTasks.length > 0 && (
+            <div className="space-y-1.5">
+              {selectedTasks.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center gap-2 rounded-lg bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800/30 px-3 py-2"
+                >
+                  <ClipboardCheck className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+                  <p className="text-xs font-medium text-foreground truncate">{t.title}</p>
+                  {t.assignee && (
+                    <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{t.assignee}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Google Calendar events */}
           {selectedEvents.length > 0 && (
             <div className="space-y-1.5">
@@ -354,10 +415,13 @@ export function CalendarGrid({
       )}
 
       {/* Prompt when day is selected but empty */}
-      {selectedDay !== null && selectedClients.length === 0 && selectedEvents.length === 0 && (
-        <div className="mt-3 rounded-xl border border-dashed border-border px-4 py-3 text-center">
+      {selectedDay !== null &&
+        selectedClients.length === 0 &&
+        selectedEvents.length === 0 &&
+        selectedTasks.length === 0 && (
+        <div className="mt-4 rounded-xl border border-dashed border-border px-4 py-3 text-center">
           <p className="text-xs text-muted-foreground">
-            Inga inspelningar den {selectedDay} {MONTH_NAMES[month].toLowerCase()}
+            Inga inspelningar eller uppgifter den {selectedDay} {MONTH_NAMES[month].toLowerCase()}
           </p>
         </div>
       )}
