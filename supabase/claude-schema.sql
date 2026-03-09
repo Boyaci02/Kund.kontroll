@@ -54,3 +54,36 @@ create trigger claude_leads_updated_at
 -- =====================
 alter table claude_tasks disable row level security;
 alter table claude_leads disable row level security;
+
+-- =====================
+-- COMMUNITY MANAGEMENT
+-- =====================
+create table if not exists clients (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  metricool_blog_id text,
+  tone text,
+  bolag text default 'syns_nu' check (bolag in ('syns_nu', 'illumo')),
+  active boolean default true,
+  created_at timestamptz default now()
+);
+
+create table if not exists comment_queue (
+  id uuid default gen_random_uuid() primary key,
+  client_id uuid references clients(id),
+  platform text check (platform in ('instagram', 'facebook', 'google', 'tiktok')),
+  commenter_name text,
+  comment_text text not null,
+  post_url text,
+  suggested_response text,
+  status text default 'pending' check (status in ('pending', 'approved', 'sent', 'skipped')),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create trigger comment_queue_updated_at
+  before update on comment_queue
+  for each row execute function update_updated_at();
+
+alter table clients disable row level security;
+alter table comment_queue disable row level security;
