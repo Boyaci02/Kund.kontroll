@@ -217,7 +217,7 @@ function DayPanel({
                   <p className="text-sm font-semibold text-foreground">{e.task?.title}</p>
                   <div className="flex items-center gap-3 mt-1">
                     {e.task?.assignee && <span className="text-[10px] text-muted-foreground">{e.task.assignee}</span>}
-                    {e.task?.priority && e.task.priority !== "" && (
+                    {e.task?.priority && (
                       <span className={cn(
                         "text-[9px] font-semibold rounded-full px-1.5 py-0.5 uppercase",
                         e.task.priority === "high" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
