@@ -113,6 +113,7 @@ export function Sidebar() {
         </SubNav>
         <NavLink href="/onboarding"     label="Onboarding"       icon={CheckSquare}     active={pathname === "/onboarding"} badge={unreadFor("onboarding")} />
         <NavLink href="/tasks"          label="Tasks"            icon={ClipboardList}   active={pathname === "/tasks"} badge={unreadFor("tasks")} />
+        <NavLink href="/kalender"       label="Kalender"         icon={Calendar}        active={pathname === "/kalender"} />
         <NavLink href="/veckoplanering" label="Veckoplanering"   icon={Calendar}        active={pathname === "/veckoplanering"} />
         <NavLink href="/kundkontakt"    label="Kundkontakt"      icon={PhoneCall}       active={pathname === "/kundkontakt"} />
         <NavLink href="/sms-mallar"     label="SMS-mallar"       icon={MessageSquare}   active={pathname === "/sms-mallar"} />
