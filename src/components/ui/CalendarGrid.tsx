@@ -15,8 +15,9 @@ const MONTH_NAMES = [
 ]
 const DAY_NAMES = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
 
-// Re-export from shared module for backwards compatibility
-export { parseNrDates } from "@/lib/nr-parser"
+// Import and re-export from shared module for backwards compatibility
+import { parseNrDates } from "@/lib/nr-parser"
+export { parseNrDates }
 
 interface CalendarGridProps {
   clients: Kund[]
