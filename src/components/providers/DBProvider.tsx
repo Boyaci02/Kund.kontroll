@@ -6,6 +6,29 @@ import type { AppNotification, DB, Kund, KontaktPost, KontaktTyp, Lead, ObEnroll
 import { SCHEMA, KONTAKTER } from "@/lib/data"
 import { supabase } from "@/lib/supabase"
 
+// ── Weekly Saturday reset helpers ─────────────────────────────────────────────
+
+function getLastSaturdayMidnight(): Date {
+  const now = new Date()
+  // getDay(): 0=Sun 1=Mon ... 6=Sat
+  const daysSinceSat = now.getDay() === 6 ? 0 : (now.getDay() + 1)
+  const sat = new Date(now)
+  sat.setDate(now.getDate() - daysSinceSat)
+  sat.setHours(0, 0, 0, 0)
+  return sat
+}
+
+function getUpcomingVecka(lastSaturday: Date): keyof Veckoschema {
+  // Next Monday = Saturday + 2 days
+  const nextMonday = new Date(lastSaturday)
+  nextMonday.setDate(lastSaturday.getDate() + 2)
+  const day = nextMonday.getDate()
+  if (day <= 7) return "v1"
+  if (day <= 14) return "v2"
+  if (day <= 21) return "v3"
+  return "v4"
+}
+
 export function DBProvider({ children }: { children: React.ReactNode }) {
   const [db, setDB] = useState<DB>(getInitialDB)
   const dbRef = useRef<DB>(getInitialDB())
@@ -70,6 +93,41 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
           nextId: Math.max(current.nextId, 39),
         }
       }
+
+      // ── Lördag-reset: rensa contactLog + uppdatera bokningskontakter ──────────
+      const lastSaturday = getLastSaturdayMidnight()
+      const lastReset = current.lastWeeklyResetAt ?? "1970-01-01T00:00:00.000Z"
+      if (new Date(lastReset) < lastSaturday) {
+        const vecka = getUpcomingVecka(lastSaturday)
+        const sched = current.schedule ?? { v1: [], v2: [], v3: [], v4: [] }
+        const namesThisWeek: string[] = sched[vecka] ?? []
+        const clientMap = new Map(current.clients.map((c) => [c.name, c]))
+
+        let nextContactId = current.nextContactId ?? 1
+        const veckaLabel = { v1: "Vecka 1", v2: "Vecka 2", v3: "Vecka 3", v4: "Vecka 4" }[vecka]
+
+        const newBookingContacts: KontaktPost[] = namesThisWeek.map((name) => {
+          const kund = clientMap.get(name)
+          return {
+            id: nextContactId++,
+            name,
+            day: veckaLabel,
+            note: kund?.ph ? kund.ph : "",
+            typ: "booking" as KontaktTyp,
+          }
+        })
+
+        const nonBooking = (current.contacts ?? []).filter((c) => c.typ !== "booking")
+        current = {
+          ...current,
+          contactLog: {},
+          contacts: [...nonBooking, ...newBookingContacts],
+          nextContactId,
+          lastWeeklyResetAt: lastSaturday.toISOString(),
+        }
+        console.log(`[weekly-reset] Körd för lördag ${lastSaturday.toLocaleDateString("sv-SE")} — ${vecka} (${namesThisWeek.length} bokningskontakter)`)
+      }
+      // ── Slut lördag-reset ─────────────────────────────────────────────────────
 
       setDB(current)
       dbRef.current = current

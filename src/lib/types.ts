@@ -148,6 +148,7 @@ export interface DB {
   nextNotifId: number
   notifReadAt: Record<string, Record<string, string>>
   obEnrollments: ObEnrollment[]
+  lastWeeklyResetAt?: string
 }
 
 export const TEAM_FARGER: Record<string, string> = {
