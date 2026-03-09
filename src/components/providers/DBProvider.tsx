@@ -19,21 +19,6 @@ function getLastWeekday(targetDay: number): Date {
   return d
 }
 
-// Which vecka of the month are we in (1-7=v1, 8-14=v2, 15-21=v3, 22+=v4)
-function getCurrentVecka(): keyof Veckoschema {
-  const day = new Date().getDate()
-  if (day <= 7) return "v1"
-  if (day <= 14) return "v2"
-  if (day <= 21) return "v3"
-  return "v4"
-}
-
-// v1→v3, v2→v4, v3→v1, v4→v2 (booking contacts are always 2 weeks ahead)
-function vecka2Ahead(v: keyof Veckoschema): keyof Veckoschema {
-  const map: Record<keyof Veckoschema, keyof Veckoschema> = { v1: "v3", v2: "v4", v3: "v1", v4: "v2" }
-  return map[v]
-}
-
 // Remove only "confirmed" entries for keys starting with prefix; keep "contacted" (yellow)
 function clearConfirmedForType(
   log: Record<string, "contacted" | "confirmed">,
@@ -124,28 +109,26 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // ── Lördag-reset: uppdatera bokningskontakter (behåll contacted/gul) ────────
+      // ── Lördag-reset: bokningskontakter = kunder med nr-datum veckan om 2 veckor ─
       const lastSat = getLastWeekday(6)
       if (new Date(current.lastWeeklyResetAt ?? 0) < lastSat) {
-        const currentVecka = getCurrentVecka()
-        const targetVecka = vecka2Ahead(currentVecka)
-        const sched = current.schedule ?? { v1: [], v2: [], v3: [], v4: [] }
-        const names: string[] = sched[targetVecka] ?? []
-        const clientMap = new Map(current.clients.map((c) => [c.name, c]))
+        // Veckan 2 kalenderv. framåt: lastSat+9 (mån) → lastSat+15 (sön)
+        const twoWeeksAhead: Date[] = []
+        for (let i = 9; i <= 15; i++) {
+          const d = new Date(lastSat)
+          d.setDate(lastSat.getDate() + i)
+          twoWeeksAhead.push(d)
+        }
 
+        const bookingClients = clientsWithRecordingOnDates(current.clients, twoWeeksAhead)
         let nextContactId = current.nextContactId ?? 1
-        const veckaLabel = { v1: "Vecka 1", v2: "Vecka 2", v3: "Vecka 3", v4: "Vecka 4" }[targetVecka]
-
-        const newBookingContacts: KontaktPost[] = names.map((name) => {
-          const kund = clientMap.get(name)
-          return {
-            id: nextContactId++,
-            name,
-            day: veckaLabel,
-            note: kund?.ph ?? "",
-            typ: "booking" as KontaktTyp,
-          }
-        })
+        const newBookingContacts: KontaktPost[] = bookingClients.map((kund) => ({
+          id: nextContactId++,
+          name: kund.name,
+          day: "",
+          note: kund.ph ?? "",
+          typ: "booking" as KontaktTyp,
+        }))
 
         const nonBooking = (current.contacts ?? []).filter((c) => c.typ !== "booking")
         const cleanedLog = clearConfirmedForType(current.contactLog ?? {}, "booking-")
@@ -156,7 +139,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
           nextContactId,
           lastWeeklyResetAt: lastSat.toISOString(),
         }
-        console.log(`[saturday-reset] ${lastSat.toLocaleDateString("sv-SE")} — ${targetVecka} (+2 från ${currentVecka}), ${names.length} bokningskontakter`)
+        console.log(`[saturday-reset] ${lastSat.toLocaleDateString("sv-SE")} — ${bookingClients.length} bokningskontakter (nr-datum om 2 v)`)
       }
       // ── Slut lördag-reset ─────────────────────────────────────────────────────
 
