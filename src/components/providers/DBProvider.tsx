@@ -5,28 +5,58 @@ import { DBContext, loadDB, saveDB, getInitialDB } from "@/lib/store"
 import type { AppNotification, DB, Kund, KontaktPost, KontaktTyp, Lead, ObEnrollment, Veckoschema } from "@/lib/types"
 import { SCHEMA, KONTAKTER } from "@/lib/data"
 import { supabase } from "@/lib/supabase"
+import { parseNrDates } from "@/lib/nr-parser"
 
-// ── Weekly Saturday reset helpers ─────────────────────────────────────────────
+// ── Auto-reset helpers ─────────────────────────────────────────────────────────
 
-function getLastSaturdayMidnight(): Date {
+// Returns midnight of the most recent occurrence of targetDay (0=Sun…6=Sat)
+function getLastWeekday(targetDay: number): Date {
   const now = new Date()
-  // getDay(): 0=Sun 1=Mon ... 6=Sat
-  const daysSinceSat = now.getDay() === 6 ? 0 : (now.getDay() + 1)
-  const sat = new Date(now)
-  sat.setDate(now.getDate() - daysSinceSat)
-  sat.setHours(0, 0, 0, 0)
-  return sat
+  const daysBack = (now.getDay() - targetDay + 7) % 7
+  const d = new Date(now)
+  d.setDate(now.getDate() - daysBack)
+  d.setHours(0, 0, 0, 0)
+  return d
 }
 
-function getUpcomingVecka(lastSaturday: Date): keyof Veckoschema {
-  // Next Monday = Saturday + 2 days
-  const nextMonday = new Date(lastSaturday)
-  nextMonday.setDate(lastSaturday.getDate() + 2)
-  const day = nextMonday.getDate()
+// Which vecka of the month are we in (1-7=v1, 8-14=v2, 15-21=v3, 22+=v4)
+function getCurrentVecka(): keyof Veckoschema {
+  const day = new Date().getDate()
   if (day <= 7) return "v1"
   if (day <= 14) return "v2"
   if (day <= 21) return "v3"
   return "v4"
+}
+
+// v1→v3, v2→v4, v3→v1, v4→v2 (booking contacts are always 2 weeks ahead)
+function vecka2Ahead(v: keyof Veckoschema): keyof Veckoschema {
+  const map: Record<keyof Veckoschema, keyof Veckoschema> = { v1: "v3", v2: "v4", v3: "v1", v4: "v2" }
+  return map[v]
+}
+
+// Remove only "confirmed" entries for keys starting with prefix; keep "contacted" (yellow)
+function clearConfirmedForType(
+  log: Record<string, "contacted" | "confirmed">,
+  prefix: string
+): Record<string, "contacted" | "confirmed"> {
+  const result: Record<string, "contacted" | "confirmed"> = {}
+  for (const [key, val] of Object.entries(log)) {
+    if (key.startsWith(prefix) && val === "confirmed") continue
+    result[key] = val
+  }
+  return result
+}
+
+// Find AKTIV clients whose nr-dates match any of the given dates
+function clientsWithRecordingOnDates(clients: Kund[], dates: Date[]): Kund[] {
+  const year = new Date().getFullYear()
+  const keys = new Set(dates.map((d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`))
+  return clients.filter((kund) => {
+    if (kund.st !== "AKTIV" || !kund.nr) return false
+    return parseNrDates(kund.nr, year).some(
+      (d) => keys.has(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`)
+    )
+  })
 }
 
 export function DBProvider({ children }: { children: React.ReactNode }) {
@@ -94,40 +124,102 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // ── Lördag-reset: rensa contactLog + uppdatera bokningskontakter ──────────
-      const lastSaturday = getLastSaturdayMidnight()
-      const lastReset = current.lastWeeklyResetAt ?? "1970-01-01T00:00:00.000Z"
-      if (new Date(lastReset) < lastSaturday) {
-        const vecka = getUpcomingVecka(lastSaturday)
+      // ── Lördag-reset: uppdatera bokningskontakter (behåll contacted/gul) ────────
+      const lastSat = getLastWeekday(6)
+      if (new Date(current.lastWeeklyResetAt ?? 0) < lastSat) {
+        const currentVecka = getCurrentVecka()
+        const targetVecka = vecka2Ahead(currentVecka)
         const sched = current.schedule ?? { v1: [], v2: [], v3: [], v4: [] }
-        const namesThisWeek: string[] = sched[vecka] ?? []
+        const names: string[] = sched[targetVecka] ?? []
         const clientMap = new Map(current.clients.map((c) => [c.name, c]))
 
         let nextContactId = current.nextContactId ?? 1
-        const veckaLabel = { v1: "Vecka 1", v2: "Vecka 2", v3: "Vecka 3", v4: "Vecka 4" }[vecka]
+        const veckaLabel = { v1: "Vecka 1", v2: "Vecka 2", v3: "Vecka 3", v4: "Vecka 4" }[targetVecka]
 
-        const newBookingContacts: KontaktPost[] = namesThisWeek.map((name) => {
+        const newBookingContacts: KontaktPost[] = names.map((name) => {
           const kund = clientMap.get(name)
           return {
             id: nextContactId++,
             name,
             day: veckaLabel,
-            note: kund?.ph ? kund.ph : "",
+            note: kund?.ph ?? "",
             typ: "booking" as KontaktTyp,
           }
         })
 
         const nonBooking = (current.contacts ?? []).filter((c) => c.typ !== "booking")
+        const cleanedLog = clearConfirmedForType(current.contactLog ?? {}, "booking-")
         current = {
           ...current,
-          contactLog: {},
+          contactLog: cleanedLog,
           contacts: [...nonBooking, ...newBookingContacts],
           nextContactId,
-          lastWeeklyResetAt: lastSaturday.toISOString(),
+          lastWeeklyResetAt: lastSat.toISOString(),
         }
-        console.log(`[weekly-reset] Körd för lördag ${lastSaturday.toLocaleDateString("sv-SE")} — ${vecka} (${namesThisWeek.length} bokningskontakter)`)
+        console.log(`[saturday-reset] ${lastSat.toLocaleDateString("sv-SE")} — ${targetVecka} (+2 från ${currentVecka}), ${names.length} bokningskontakter`)
       }
       // ── Slut lördag-reset ─────────────────────────────────────────────────────
+
+      // ── Onsdag-reset: SMS-kontakter för inspelningar mån–ons nästa vecka ─────
+      const lastWed = getLastWeekday(3)
+      if (new Date(current.lastWedSmsResetAt ?? 0) < lastWed) {
+        // Next Monday = lastWed + 5, Tuesday +6, Wednesday +7
+        const nextMon = new Date(lastWed); nextMon.setDate(lastWed.getDate() + 5)
+        const nextTue = new Date(lastWed); nextTue.setDate(lastWed.getDate() + 6)
+        const nextWed2 = new Date(lastWed); nextWed2.setDate(lastWed.getDate() + 7)
+
+        const smsClients = clientsWithRecordingOnDates(current.clients, [nextMon, nextTue, nextWed2])
+        let nextContactId = current.nextContactId ?? 1
+        const newSmsContacts: KontaktPost[] = smsClients.map((kund) => ({
+          id: nextContactId++,
+          name: kund.name,
+          day: "",
+          note: kund.ph ?? "",
+          typ: "sms" as KontaktTyp,
+        }))
+
+        const nonSms = (current.contacts ?? []).filter((c) => c.typ !== "sms")
+        const cleanedLog = clearConfirmedForType(current.contactLog ?? {}, "sms-")
+        current = {
+          ...current,
+          contactLog: cleanedLog,
+          contacts: [...nonSms, ...newSmsContacts],
+          nextContactId,
+          lastWedSmsResetAt: lastWed.toISOString(),
+        }
+        console.log(`[wednesday-reset] ${lastWed.toLocaleDateString("sv-SE")} — ${smsClients.length} SMS-kontakter (mån–ons nästa vecka)`)
+      }
+      // ── Slut onsdag-reset ─────────────────────────────────────────────────────
+
+      // ── Fredag-reset: SMS-kontakter för inspelningar tor–fre nästa vecka ─────
+      const lastFri = getLastWeekday(5)
+      if (new Date(current.lastFriSmsResetAt ?? 0) < lastFri) {
+        // Next Thursday = lastFri + 6, Friday +7
+        const nextThu = new Date(lastFri); nextThu.setDate(lastFri.getDate() + 6)
+        const nextFri2 = new Date(lastFri); nextFri2.setDate(lastFri.getDate() + 7)
+
+        const smsClients = clientsWithRecordingOnDates(current.clients, [nextThu, nextFri2])
+        let nextContactId = current.nextContactId ?? 1
+        const newSmsContacts: KontaktPost[] = smsClients.map((kund) => ({
+          id: nextContactId++,
+          name: kund.name,
+          day: "",
+          note: kund.ph ?? "",
+          typ: "sms" as KontaktTyp,
+        }))
+
+        const nonSms = (current.contacts ?? []).filter((c) => c.typ !== "sms")
+        const cleanedLog = clearConfirmedForType(current.contactLog ?? {}, "sms-")
+        current = {
+          ...current,
+          contactLog: cleanedLog,
+          contacts: [...nonSms, ...newSmsContacts],
+          nextContactId,
+          lastFriSmsResetAt: lastFri.toISOString(),
+        }
+        console.log(`[friday-reset] ${lastFri.toLocaleDateString("sv-SE")} — ${smsClients.length} SMS-kontakter (tor–fre nästa vecka)`)
+      }
+      // ── Slut fredag-reset ─────────────────────────────────────────────────────
 
       setDB(current)
       dbRef.current = current

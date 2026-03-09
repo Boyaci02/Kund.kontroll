@@ -149,6 +149,8 @@ export interface DB {
   notifReadAt: Record<string, Record<string, string>>
   obEnrollments: ObEnrollment[]
   lastWeeklyResetAt?: string
+  lastWedSmsResetAt?: string
+  lastFriSmsResetAt?: string
 }
 
 export const TEAM_FARGER: Record<string, string> = {
