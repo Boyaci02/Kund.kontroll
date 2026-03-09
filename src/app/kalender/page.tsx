@@ -358,6 +358,12 @@ export default function KalenderPage() {
   // All days that have at least one event (for mini-calendar dots)
   const eventDays = useMemo(() => new Set(eventsByDay.keys()), [eventsByDay])
 
+  // Tasks without any date (can't be placed on calendar)
+  const tasksWithoutDate = useMemo(() =>
+    tasks.filter((t) => !t.endDate && !t.startDate && t.status !== "done"),
+    [tasks]
+  )
+
   const today = new Date()
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month
 
@@ -419,6 +425,32 @@ export default function KalenderPage() {
             </span>
           </div>
         </div>
+
+        {/* Tasks without a date */}
+        {tasksWithoutDate.length > 0 && (
+          <>
+            <div className="mx-4 border-t border-border" />
+            <div className="px-4 py-4 space-y-2">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                Utan datum ({tasksWithoutDate.length})
+              </p>
+              {tasksWithoutDate.map((t) => (
+                <div
+                  key={t.id}
+                  className="rounded-lg border border-border bg-muted/30 px-2.5 py-2"
+                >
+                  <p className="text-[11px] font-medium text-foreground leading-snug">{t.title || "(Ingen titel)"}</p>
+                  {t.assignee && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{t.assignee}</p>
+                  )}
+                </div>
+              ))}
+              <p className="text-[9px] text-muted-foreground pt-1">
+                Lägg till en deadline i Tasks för att se dem i kalendern.
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Main calendar ─────────────────────────────────────────────── */}
