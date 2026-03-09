@@ -78,26 +78,9 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         current = { ...current, contacts: seeded, nextContactId: id }
       }
 
-      // Migration: ensure obEnrollments exists for existing users
+      // Migration: ensure obEnrollments exists for existing users (run once)
       if (!current.obEnrollments) {
         current = { ...current, obEnrollments: [] }
-      }
-
-      // Migration: seed obEnrollments from existing AKTIV clients if queue is empty
-      if (current.obEnrollments.length === 0 && current.clients.length > 0) {
-        const aktiva = current.clients.filter((c) => c.st === "AKTIV" || c.st === "")
-        current = {
-          ...current,
-          obEnrollments: aktiva.map((c, i) => ({
-            id: Date.now() + i,
-            kundId: c.id,
-            name: c.name,
-            pkg: c.pkg || "",
-            addedAt: new Date().toLocaleDateString("sv-SE"),
-            priority: "normal" as const,
-            order: i,
-          })),
-        }
       }
 
       // Migration: inject "Syns Nu" internal client for existing users
