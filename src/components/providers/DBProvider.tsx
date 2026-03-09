@@ -7,6 +7,14 @@ import { SCHEMA, KONTAKTER } from "@/lib/data"
 import { supabase } from "@/lib/supabase"
 import { parseNrDates } from "@/lib/nr-parser"
 
+// ── Onboarding-state: separat Supabase-rad för att undvika överskrivning ──────
+async function saveObData(db: { obState: DB["obState"]; obEnrollments: DB["obEnrollments"] }) {
+  await supabase
+    .from("app_state")
+    .upsert({ id: "ob_state", data: { obState: db.obState, obEnrollments: db.obEnrollments }, updated_at: new Date().toISOString() })
+    .then((r) => { if (r?.error) console.error("[sync:ob_state] upsert failed:", r.error) })
+}
+
 // ── Auto-reset helpers ─────────────────────────────────────────────────────────
 
 // Returns midnight of the most recent occurrence of targetDay (0=Sun…6=Sat)
@@ -55,16 +63,26 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
       setDB(local)
       dbRef.current = local
 
-      // 2. Hämta från Supabase (source of truth)
-      const { data, error } = await supabase
-        .from("app_state")
-        .select("data")
-        .eq("id", "main")
-        .single()
+      // 2. Hämta från Supabase — main + ob_state parallellt
+      const [mainRes, obRes] = await Promise.all([
+        supabase.from("app_state").select("data").eq("id", "main").single(),
+        supabase.from("app_state").select("data").eq("id", "ob_state").single(),
+      ])
 
       let current = local
-      if (!error && data?.data && Object.keys(data.data).length > 0) {
-        current = data.data as DB
+      if (!mainRes.error && mainRes.data?.data && Object.keys(mainRes.data.data).length > 0) {
+        current = mainRes.data.data as DB
+      }
+
+      // ob_state-raden är auktoritativ för onboarding — överskriver aldrig av main-reset
+      type ObData = { obState?: DB["obState"]; obEnrollments?: DB["obEnrollments"] }
+      if (!obRes.error && obRes.data?.data) {
+        const ob = obRes.data.data as ObData
+        if (ob.obState) current = { ...current, obState: ob.obState }
+        if (ob.obEnrollments) current = { ...current, obEnrollments: ob.obEnrollments }
+      } else {
+        // Engångsmigration: ob_state-raden finns inte än → seed från main
+        await saveObData({ obState: current.obState, obEnrollments: current.obEnrollments ?? [] })
       }
 
       // Seed contacts from static KONTAKTER if not yet initialized
@@ -199,7 +217,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
     init()
 
-    // 3. Realtime-prenumeration
+    // 3. Realtime-prenumerationer
     const channel = supabase
       .channel("app_state_changes")
       .on(
@@ -217,7 +235,34 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    const obChannel = supabase
+      .channel("ob_state_changes")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "app_state", filter: "id=eq.ob_state" },
+        (payload) => {
+          const row = payload.new as { id?: string; data?: unknown }
+          if (row?.id !== "ob_state") return
+          const ob = row.data as { obState?: DB["obState"]; obEnrollments?: DB["obEnrollments"] }
+          if (!ob) return
+          setDB((prev) => ({
+            ...prev,
+            ...(ob.obState !== undefined ? { obState: ob.obState } : {}),
+            ...(ob.obEnrollments !== undefined ? { obEnrollments: ob.obEnrollments } : {}),
+          }))
+          dbRef.current = {
+            ...dbRef.current,
+            ...(ob.obState !== undefined ? { obState: ob.obState } : {}),
+            ...(ob.obEnrollments !== undefined ? { obEnrollments: ob.obEnrollments } : {}),
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+      supabase.removeChannel(obChannel)
+    }
   }, [])
 
   const update = useCallback((updater: (prev: DB) => DB) => {
@@ -300,12 +345,10 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         const state = prev.obState[kundId] ?? {}
         return {
           ...prev,
-          obState: {
-            ...prev.obState,
-            [kundId]: { ...state, [taskId]: !state[taskId] },
-          },
+          obState: { ...prev.obState, [kundId]: { ...state, [taskId]: !state[taskId] } },
         }
       })
+      setTimeout(() => saveObData({ obState: dbRef.current.obState, obEnrollments: dbRef.current.obEnrollments ?? [] }), 0)
     },
     [update]
   )
@@ -316,6 +359,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         obState: { ...prev.obState, [kundId]: {} },
       }))
+      setTimeout(() => saveObData({ obState: dbRef.current.obState, obEnrollments: dbRef.current.obEnrollments ?? [] }), 0)
     },
     [update]
   )
@@ -488,6 +532,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         }
         return { ...prev, obEnrollments: [...enrollments, entry] }
       })
+      setTimeout(() => saveObData({ obState: dbRef.current.obState, obEnrollments: dbRef.current.obEnrollments ?? [] }), 0)
     },
     [update]
   )
@@ -498,6 +543,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         obEnrollments: (prev.obEnrollments ?? []).filter((e) => e.id !== id),
       }))
+      setTimeout(() => saveObData({ obState: dbRef.current.obState, obEnrollments: dbRef.current.obEnrollments ?? [] }), 0)
     },
     [update]
   )
@@ -505,6 +551,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
   const updateObEnrollments = useCallback(
     (enrollments: ObEnrollment[]) => {
       update((prev) => ({ ...prev, obEnrollments: enrollments }))
+      setTimeout(() => saveObData({ obState: dbRef.current.obState, obEnrollments: enrollments }), 0)
     },
     [update]
   )
