@@ -318,12 +318,14 @@ export default function KalenderPage() {
       }
     }
 
-    // Tasks with endDate in this month
+    // Tasks with endDate (or startDate as fallback) in this month
     const monthStr = String(month + 1).padStart(2, "0")
     const prefix = `${year}-${monthStr}-`
     for (const task of tasks) {
-      if (!task.endDate || !task.endDate.startsWith(prefix)) continue
-      const day = parseInt(task.endDate.slice(8, 10))
+      // Use endDate as primary, startDate as fallback
+      const dateStr = task.endDate || task.startDate
+      if (!dateStr || !dateStr.startsWith(prefix)) continue
+      const day = parseInt(dateStr.slice(8, 10))
       if (day >= 1 && day <= 31) {
         add(day, {
           id: `task-${task.id}`,
