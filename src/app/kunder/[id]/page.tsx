@@ -222,18 +222,20 @@ function CustomerFiles({ kundId }: { kundId: number }) {
   async function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
     setUploading(true)
+    let successCount = 0
     for (const file of Array.from(fileList)) {
       const path = `${kundId}/${Date.now()}-${file.name}`
       const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file)
-      if (upErr) { toast.error(`Kunde inte ladda upp ${file.name}`); continue }
+      if (upErr) { toast.error(`Kunde inte ladda upp ${file.name}: ${upErr.message}`); continue }
       const { error: dbErr } = await supabase.from("customer_files").insert({
         kund_id: kundId, name: file.name, path, size: file.size,
       })
-      if (dbErr) toast.error("Sparning av filinfo misslyckades")
+      if (dbErr) { toast.error(`Sparning av filinfo misslyckades: ${dbErr.message}`); continue }
+      successCount++
     }
     await loadFiles()
     setUploading(false)
-    toast.success(fileList.length > 1 ? `${fileList.length} filer uppladdade` : "Fil uppladdad")
+    if (successCount > 0) toast.success(successCount > 1 ? `${successCount} filer uppladdade` : "Fil uppladdad")
   }
 
   async function openFile(path: string) {
