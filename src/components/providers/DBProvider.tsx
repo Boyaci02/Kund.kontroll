@@ -78,8 +78,15 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
       type ObData = { obState?: DB["obState"]; obEnrollments?: DB["obEnrollments"] }
       if (!obRes.error && obRes.data?.data) {
         const ob = obRes.data.data as ObData
-        if (ob.obState) current = { ...current, obState: ob.obState }
-        if (ob.obEnrollments) current = { ...current, obEnrollments: ob.obEnrollments }
+        if (ob.obState !== undefined) current = { ...current, obState: ob.obState }
+        // Använd ob_state-listan BARA om den är icke-tom, eller om main också är tom
+        // → förhindrar att en tom ob_state-rad raderar befintlig data
+        if (Array.isArray(ob.obEnrollments)) {
+          if (ob.obEnrollments.length > 0 || (current.obEnrollments ?? []).length === 0) {
+            current = { ...current, obEnrollments: ob.obEnrollments }
+          }
+          // annars: ob_state är tom men main har data → behåll main-datan
+        }
       } else {
         // Engångsmigration: ob_state-raden finns inte än → seed från main
         await saveObData({ obState: current.obState, obEnrollments: current.obEnrollments ?? [] })
