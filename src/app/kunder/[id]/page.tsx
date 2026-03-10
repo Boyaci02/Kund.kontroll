@@ -47,6 +47,8 @@ import {
   File,
   Upload,
   Download,
+  Eye,
+  X,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { newRow } from "@/lib/editor-types"
@@ -202,10 +204,20 @@ function fmtSize(bytes: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+type PreviewFile = { url: string; name: string; type: "image" | "pdf" | "other" }
+
+function filePreviewType(name: string): "image" | "pdf" | "other" {
+  const ext = name.split(".").pop()?.toLowerCase() ?? ""
+  if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext)) return "image"
+  if (ext === "pdf") return "pdf"
+  return "other"
+}
+
 function CustomerFiles({ kundId }: { kundId: number }) {
   const [files, setFiles] = useState<CustomerFile[]>([])
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [preview, setPreview] = useState<PreviewFile | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { loadFiles() }, [kundId])
@@ -238,10 +250,15 @@ function CustomerFiles({ kundId }: { kundId: number }) {
     if (successCount > 0) toast.success(successCount > 1 ? `${successCount} filer uppladdade` : "Fil uppladdad")
   }
 
-  async function openFile(path: string) {
-    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600)
+  async function openFile(file: CustomerFile) {
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(file.path, 3600)
     if (error || !data) { toast.error("Kunde inte öppna filen"); return }
-    window.open(data.signedUrl, "_blank")
+    const type = filePreviewType(file.name)
+    if (type === "other") {
+      window.open(data.signedUrl, "_blank")
+    } else {
+      setPreview({ url: data.signedUrl, name: file.name, type })
+    }
   }
 
   async function deleteFile(file: CustomerFile) {
@@ -303,11 +320,13 @@ function CustomerFiles({ kundId }: { kundId: number }) {
                   {new Date(f.uploaded_at).toLocaleDateString("sv-SE", { day: "numeric", month: "short", year: "numeric" })}
                 </span>
                 <button
-                  onClick={() => openFile(f.path)}
+                  onClick={() => openFile(f)}
                   className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
-                  title="Öppna fil"
+                  title={filePreviewType(f.name) !== "other" ? "Förhandsgranska" : "Öppna fil"}
                 >
-                  <Download className="h-3.5 w-3.5" />
+                  {filePreviewType(f.name) !== "other"
+                    ? <Eye className="h-3.5 w-3.5" />
+                    : <Download className="h-3.5 w-3.5" />}
                 </button>
                 <button
                   onClick={() => deleteFile(f)}
@@ -327,6 +346,56 @@ function CustomerFiles({ kundId }: { kundId: number }) {
           </div>
         )}
       </div>
+
+      {/* Preview modal */}
+      {preview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="relative bg-background rounded-xl shadow-2xl overflow-hidden max-w-4xl w-full max-h-[90vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-sm font-medium truncate">{preview.name}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={preview.url}
+                  download={preview.name}
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <Download className="h-3.5 w-3.5" /> Ladda ner
+                </a>
+                <button
+                  onClick={() => setPreview(null)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto min-h-0">
+              {preview.type === "image" ? (
+                <img
+                  src={preview.url}
+                  alt={preview.name}
+                  className="w-full h-full object-contain"
+                  style={{ maxHeight: "calc(90vh - 56px)" }}
+                />
+              ) : (
+                <iframe
+                  src={preview.url}
+                  title={preview.name}
+                  className="w-full border-0"
+                  style={{ height: "calc(90vh - 56px)" }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
