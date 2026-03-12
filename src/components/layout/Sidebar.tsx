@@ -107,7 +107,7 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
         <NavLink href="/"               label="Översikt"         icon={LayoutDashboard} active={pathname === "/"} />
-        <NavLink href="/kunder"         label="Kunder"           icon={Users}           active={pathname === "/kunder"} />
+        <NavLink href="/kunder"         label="Kunder"           icon={Users}           active={pathname === "/kunder"} badge={unreadFor("kunder")} />
         <SubNav show={showLeads}>
           <div className="pb-0.5">
             <NavLink href="/leads"      label="Leads"            icon={UserPlus}        active={pathname === "/leads"} indent badge={unreadFor("leads")} />

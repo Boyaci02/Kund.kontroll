@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation"
 import { useState, useEffect, useRef } from "react"
 import { useDB } from "@/lib/store"
+import { useAuth } from "@/components/providers/AuthProvider"
 import { OB_STEG } from "@/lib/data"
 import { TEAM_FARGER } from "@/lib/types"
 import { paketClass, statusClass } from "@/lib/helpers"
@@ -27,6 +28,7 @@ import { Input } from "@/components/ui/input"
 import {
   ArrowLeft,
   Pencil,
+  Bell,
   Video,
   Scissors,
   UserCheck,
@@ -574,7 +576,8 @@ function contentStatusLbl(s?: string) {
 export default function KundkortPage() {
   const params = useParams()
   const router = useRouter()
-  const { db, updateKund, toggleTask, resetObState } = useDB()
+  const { db, updateKund, toggleTask, resetObState, addNotification } = useDB()
+  const { user } = useAuth()
   const id = Number(params.id)
   const kund = db.clients.find((c) => c.id === id)
 
@@ -728,6 +731,26 @@ export default function KundkortPage() {
             kund={kund}
             onSave={(patch) => updateKund({ ...kund, ...patch })}
           />
+          <Button
+            variant="outline"
+            size="sm"
+            title="Skicka uppföljningspåminnelse till teamet"
+            onClick={() => {
+              if (!user) return
+              addNotification({
+                title: `Uppföljning: ${kund.name}`,
+                body: `${user.name} vill att ni följer upp ${kund.name}`,
+                page: "kunder",
+                createdBy: user.name,
+                createdAt: new Date().toISOString(),
+              })
+              toast.success("Påminnelse skickad till teamet")
+            }}
+            className="gap-1.5"
+          >
+            <Bell className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Påminn teamet</span>
+          </Button>
           <Button variant="outline" size="sm" onClick={openEdit} className="gap-1.5">
             <Pencil className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Redigera</span>

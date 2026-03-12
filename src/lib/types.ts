@@ -123,7 +123,7 @@ export interface ObEnrollment {
   order: number
 }
 
-export type NotifPage = "tasks" | "leads" | "onboarding"
+export type NotifPage = "tasks" | "leads" | "onboarding" | "kunder"
 
 export interface AppNotification {
   id: number
@@ -194,6 +194,15 @@ export type QoplaStatus =
   | "Förlorad"
 
 export type QoplaTjanst = "Social Media" | "Hemsida"
+
+export interface QoplaComment {
+  id: number
+  lead_id: number
+  text: string
+  author: string
+  needs_followup: boolean
+  created_at: string
+}
 
 export interface QoplaLead {
   id: number

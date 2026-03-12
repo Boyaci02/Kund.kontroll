@@ -107,3 +107,18 @@ create table if not exists qopla_leads (
 );
 
 alter table qopla_leads disable row level security;
+
+-- =====================
+-- QOPLA COMMENTS
+-- =====================
+
+create table if not exists qopla_comments (
+  id bigserial primary key,
+  lead_id bigint references qopla_leads(id) on delete cascade,
+  text text not null,
+  author text not null,
+  needs_followup boolean default false,
+  created_at timestamptz default now()
+);
+
+alter table qopla_comments disable row level security;

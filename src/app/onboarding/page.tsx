@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import {
   ChevronDown, RotateCcw, Search, CheckCircle2, Clock,
-  LayoutGrid, List, GripVertical, X, Users,
+  LayoutGrid, List, GripVertical, X, Users, Bell,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -367,6 +367,24 @@ export default function OnboardingPage() {
                       {PRIO_LABEL[entry.priority]}
                     </button>
                     <div className="flex gap-1">
+                      <Button
+                        variant="ghost" size="icon"
+                        className="h-7 w-7 rounded-lg text-muted-foreground hover:text-primary"
+                        title="Skicka OB-påminnelse till teamet"
+                        onClick={() => {
+                          if (!user) return
+                          addNotification({
+                            title: `OB-påminnelse: ${entry.name}`,
+                            body: `${user.name}: ${done}/${TOTAL_TASKS} uppgifter klara för ${entry.name}`,
+                            page: "onboarding",
+                            createdBy: user.name,
+                            createdAt: new Date().toISOString(),
+                          })
+                          toast.success(`Påminnelse skickad för ${entry.name}`)
+                        }}
+                      >
+                        <Bell className="h-3.5 w-3.5" />
+                      </Button>
                       {tab === "klara" && (
                         <Button
                           variant="ghost" size="icon"
@@ -522,6 +540,24 @@ export default function OnboardingPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-7 w-7 rounded-lg text-muted-foreground hover:text-primary"
+                          title="Skicka OB-påminnelse till teamet"
+                          onClick={() => {
+                            if (!user) return
+                            addNotification({
+                              title: `OB-påminnelse: ${entry.name}`,
+                              body: `${user.name}: ${done}/${TOTAL_TASKS} uppgifter klara för ${entry.name}`,
+                              page: "onboarding",
+                              createdBy: user.name,
+                              createdAt: new Date().toISOString(),
+                            })
+                            toast.success(`Påminnelse skickad för ${entry.name}`)
+                          }}
+                        >
+                          <Bell className="h-3.5 w-3.5" />
+                        </Button>
                         {tab === "klara" && (
                           <Button
                             variant="ghost" size="icon"

@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useAuth } from "@/components/providers/AuthProvider"
 import { supabase } from "@/lib/supabase"
-import type { QoplaLead, QoplaStatus, QoplaTjanst } from "@/lib/types"
+import type { QoplaLead, QoplaComment, QoplaStatus, QoplaTjanst } from "@/lib/types"
+import { TEAM_FARGER } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -21,7 +22,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, Phone, Mail, Building2 } from "lucide-react"
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Phone,
+  Mail,
+  Building2,
+  X,
+  Flag,
+  MessageSquare,
+  Send,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const QOPLA_USERS = ["Emanuel", "Philip", "Jakob"]
@@ -55,23 +69,49 @@ const EMPTY_FORM = {
   notes: "",
 }
 
+function formatTime(iso: string) {
+  const d = new Date(iso)
+  return d.toLocaleDateString("sv-SE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+}
+
 export default function QoplaPage() {
   const { user } = useAuth()
   const [leads, setLeads] = useState<QoplaLead[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<"aktiva" | "klara">("aktiva")
+
+  // Edit modal
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<QoplaLead | null>(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+
+  // Side panel
+  const [selectedLead, setSelectedLead] = useState<QoplaLead | null>(null)
+  const [comments, setComments] = useState<QoplaComment[]>([])
+  const [commentText, setCommentText] = useState("")
+  const [commentFollowup, setCommentFollowup] = useState(false)
+  const [sendingComment, setSendingComment] = useState(false)
+  // followup counts per lead: { [leadId]: count }
+  const [followupCounts, setFollowupCounts] = useState<Record<number, number>>({})
+
   const [forlostExpanded, setForlostExpanded] = useState(false)
   const [dragOver, setDragOver] = useState<QoplaStatus | null>(null)
+  const commentEndRef = useRef<HTMLDivElement>(null)
 
   const hasAccess = user && QOPLA_USERS.includes(user.name)
 
   useEffect(() => {
-    if (hasAccess) loadLeads()
+    if (hasAccess) {
+      loadLeads()
+      loadFollowupCounts()
+    }
   }, [hasAccess])
+
+  // Scroll to bottom of comments when panel opens or new comment added
+  useEffect(() => {
+    commentEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [comments])
 
   async function loadLeads() {
     setLoading(true)
@@ -83,13 +123,84 @@ export default function QoplaPage() {
     setLoading(false)
   }
 
+  async function loadFollowupCounts() {
+    const { data } = await supabase
+      .from("qopla_comments")
+      .select("lead_id")
+      .eq("needs_followup", true)
+    if (!data) return
+    const counts: Record<number, number> = {}
+    for (const row of data as { lead_id: number }[]) {
+      counts[row.lead_id] = (counts[row.lead_id] ?? 0) + 1
+    }
+    setFollowupCounts(counts)
+  }
+
+  async function openPanel(lead: QoplaLead) {
+    setSelectedLead(lead)
+    setComments([])
+    setCommentText("")
+    setCommentFollowup(false)
+    const { data } = await supabase
+      .from("qopla_comments")
+      .select("*")
+      .eq("lead_id", lead.id)
+      .order("created_at", { ascending: true })
+    setComments((data as QoplaComment[]) ?? [])
+  }
+
+  async function sendComment() {
+    if (!commentText.trim() || !selectedLead || !user) return
+    setSendingComment(true)
+    const { data } = await supabase
+      .from("qopla_comments")
+      .insert({
+        lead_id: selectedLead.id,
+        text: commentText.trim(),
+        author: user.name,
+        needs_followup: commentFollowup,
+      })
+      .select()
+      .single()
+    if (data) {
+      setComments(prev => [...prev, data as QoplaComment])
+      if (commentFollowup) {
+        setFollowupCounts(prev => ({ ...prev, [selectedLead.id]: (prev[selectedLead.id] ?? 0) + 1 }))
+      }
+    }
+    setCommentText("")
+    setCommentFollowup(false)
+    setSendingComment(false)
+  }
+
+  async function toggleFollowup(comment: QoplaComment) {
+    const newVal = !comment.needs_followup
+    const { data } = await supabase
+      .from("qopla_comments")
+      .update({ needs_followup: newVal })
+      .eq("id", comment.id)
+      .select()
+      .single()
+    if (data) {
+      setComments(prev => prev.map(c => c.id === comment.id ? data as QoplaComment : c))
+      // recalculate followup count for this lead
+      if (selectedLead) {
+        setFollowupCounts(prev => {
+          const delta = newVal ? 1 : -1
+          return { ...prev, [selectedLead.id]: Math.max(0, (prev[selectedLead.id] ?? 0) + delta) }
+        })
+      }
+    }
+  }
+
   function openAdd() {
     setEditing(null)
     setForm(EMPTY_FORM)
     setModalOpen(true)
   }
 
-  function openEdit(lead: QoplaLead) {
+  function openEdit(e: React.MouseEvent, lead: QoplaLead) {
+    e.stopPropagation()
     setEditing(lead)
     setForm({
       name: lead.name,
@@ -125,7 +236,9 @@ export default function QoplaPage() {
         .select()
         .single()
       if (data) {
-        setLeads(prev => prev.map(l => l.id === editing.id ? data as QoplaLead : l))
+        const updated = data as QoplaLead
+        setLeads(prev => prev.map(l => l.id === editing.id ? updated : l))
+        if (selectedLead?.id === editing.id) setSelectedLead(updated)
       }
     } else {
       const { data } = await supabase
@@ -152,6 +265,7 @@ export default function QoplaPage() {
   async function handleDelete(id: number) {
     await supabase.from("qopla_leads").delete().eq("id", id)
     setLeads(prev => prev.filter(l => l.id !== id))
+    if (selectedLead?.id === id) setSelectedLead(null)
     setModalOpen(false)
   }
 
@@ -164,6 +278,7 @@ export default function QoplaPage() {
       .single()
     if (data) {
       setLeads(prev => prev.map(l => l.id === id ? data as QoplaLead : l))
+      if (selectedLead?.id === id) setSelectedLead(data as QoplaLead)
     }
   }
 
@@ -196,6 +311,70 @@ export default function QoplaPage() {
   const wonLeads = leads.filter(l => l.status === "Vunnen")
   const lostLeads = leads.filter(l => l.status === "Förlorad")
 
+  function LeadCard({ lead, compact = false }: { lead: QoplaLead; compact?: boolean }) {
+    const followups = followupCounts[lead.id] ?? 0
+    return (
+      <div
+        draggable={!compact}
+        onDragStart={!compact ? e => handleDragStart(e, lead.id) : undefined}
+        onClick={() => openPanel(lead)}
+        className={cn(
+          "bg-card border border-border rounded-lg p-3 space-y-2 transition-colors cursor-pointer",
+          !compact && "cursor-grab active:cursor-grabbing",
+          selectedLead?.id === lead.id ? "border-primary/60 bg-primary/5" : "hover:border-primary/40"
+        )}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-foreground truncate">{lead.name}</p>
+              {followups > 0 && (
+                <span className="flex items-center gap-0.5 text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">
+                  <Flag className="h-2.5 w-2.5" />
+                  {followups}
+                </span>
+              )}
+            </div>
+            {lead.company && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                <Building2 className="h-3 w-3 shrink-0" />
+                {lead.company}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={e => openEdit(e, lead)}
+            className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-1">
+          {lead.services.map(s => (
+            <span key={s} className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", TJANST_COLORS[s])}>
+              {s}
+            </span>
+          ))}
+        </div>
+
+        {lead.phone && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Phone className="h-3 w-3" />{lead.phone}
+          </p>
+        )}
+        {lead.email && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+            <Mail className="h-3 w-3 shrink-0" />{lead.email}
+          </p>
+        )}
+        {lead.notes && (
+          <p className="text-xs text-muted-foreground line-clamp-2 border-t border-border/60 pt-1.5">{lead.notes}</p>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       {/* Header */}
@@ -217,7 +396,7 @@ export default function QoplaPage() {
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              "px-4 py-2 text-sm font-medium border-b-2 transition-colors capitalize",
+              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
               tab === t
                 ? "border-foreground text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -230,156 +409,72 @@ export default function QoplaPage() {
 
       {loading ? (
         <p className="text-sm text-muted-foreground py-8 text-center">Laddar...</p>
-      ) : tab === "aktiva" ? (
-        /* ── Kanban ── */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {ACTIVE_STATUSES.map(col => {
-            const colLeads = activeLeads.filter(l => l.status === col)
-            return (
-              <div
-                key={col}
-                className={cn(
-                  "rounded-xl border border-border bg-muted/30 p-3 space-y-2 min-h-[200px] transition-colors",
-                  dragOver === col && "bg-primary/5 border-primary/40"
-                )}
-                onDragOver={e => { e.preventDefault(); setDragOver(col) }}
-                onDragLeave={() => setDragOver(null)}
-                onDrop={e => handleDrop(e, col)}
-              >
-                <div className="flex items-center gap-2 pb-1">
-                  <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", STATUS_COLORS[col])}>
-                    {col}
-                  </span>
-                  <span className="text-xs text-muted-foreground ml-auto">{colLeads.length}</span>
-                </div>
-
-                {colLeads.map(lead => (
-                  <div
-                    key={lead.id}
-                    draggable
-                    onDragStart={e => handleDragStart(e, lead.id)}
-                    className="bg-card border border-border rounded-lg p-3 space-y-2 cursor-grab active:cursor-grabbing hover:border-primary/40 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{lead.name}</p>
-                        {lead.company && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <Building2 className="h-3 w-3 shrink-0" />
-                            {lead.company}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => openEdit(lead)}
-                        className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1">
-                      {lead.services.map(s => (
-                        <span key={s} className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", TJANST_COLORS[s])}>
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-
-                    {lead.phone && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Phone className="h-3 w-3" />{lead.phone}
-                      </p>
-                    )}
-                    {lead.email && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
-                        <Mail className="h-3 w-3 shrink-0" />{lead.email}
-                      </p>
-                    )}
-                    {lead.notes && (
-                      <p className="text-xs text-muted-foreground line-clamp-2 border-t border-border/60 pt-1.5">{lead.notes}</p>
-                    )}
-                  </div>
-                ))}
-
-                {colLeads.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-6">Inga leads</p>
-                )}
-              </div>
-            )
-          })}
-        </div>
       ) : (
-        /* ── Klara kunder ── */
-        <div className="space-y-6">
-          {wonLeads.length === 0 && lostLeads.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">Inga klara kunder ännu.</p>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {wonLeads.map(lead => (
-                  <div key={lead.id} className="bg-card border border-border rounded-xl p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{lead.name}</p>
-                        {lead.company && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <Building2 className="h-3 w-3" />{lead.company}
-                          </p>
-                        )}
+        <div className={cn("flex gap-4", selectedLead ? "items-start" : "")}>
+          {/* Main content */}
+          <div className="flex-1 min-w-0">
+            {tab === "aktiva" ? (
+              /* ── Kanban ── */
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {ACTIVE_STATUSES.map(col => {
+                  const colLeads = activeLeads.filter(l => l.status === col)
+                  return (
+                    <div
+                      key={col}
+                      className={cn(
+                        "rounded-xl border border-border bg-muted/30 p-3 space-y-2 min-h-[200px] transition-colors",
+                        dragOver === col && "bg-primary/5 border-primary/40"
+                      )}
+                      onDragOver={e => { e.preventDefault(); setDragOver(col) }}
+                      onDragLeave={() => setDragOver(null)}
+                      onDrop={e => handleDrop(e, col)}
+                    >
+                      <div className="flex items-center gap-2 pb-1">
+                        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", STATUS_COLORS[col])}>
+                          {col}
+                        </span>
+                        <span className="text-xs text-muted-foreground ml-auto">{colLeads.length}</span>
                       </div>
-                      <button
-                        onClick={() => openEdit(lead)}
-                        className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
+
+                      {colLeads.map(lead => (
+                        <LeadCard key={lead.id} lead={lead} />
+                      ))}
+
+                      {colLeads.length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-6">Inga leads</p>
+                      )}
                     </div>
-
-                    {(lead.signed_services ?? []).length > 0 ? (
-                      <div>
-                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide mb-1">Signerade tjänster</p>
-                        <div className="flex flex-wrap gap-1">
-                          {(lead.signed_services ?? []).map(s => (
-                            <span key={s} className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", TJANST_COLORS[s])}>
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic">Inga signerade tjänster registrerade</p>
-                    )}
-
-                    {lead.phone && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Phone className="h-3 w-3" />{lead.phone}
-                      </p>
-                    )}
-                    {lead.notes && (
-                      <p className="text-xs text-muted-foreground border-t border-border/60 pt-2">{lead.notes}</p>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
-
-              {lostLeads.length > 0 && (
-                <div>
-                  <button
-                    onClick={() => setForlostExpanded(e => !e)}
-                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
-                  >
-                    {forlostExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    Förlorade leads ({lostLeads.length})
-                  </button>
-
-                  {forlostExpanded && (
+            ) : (
+              /* ── Klara kunder ── */
+              <div className="space-y-6">
+                {wonLeads.length === 0 && lostLeads.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-8 text-center">Inga klara kunder ännu.</p>
+                ) : (
+                  <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {lostLeads.map(lead => (
-                        <div key={lead.id} className="bg-card border border-border rounded-xl p-4 opacity-60 space-y-2">
+                      {wonLeads.map(lead => (
+                        <div
+                          key={lead.id}
+                          onClick={() => openPanel(lead)}
+                          className={cn(
+                            "bg-card border border-border rounded-xl p-4 space-y-3 cursor-pointer transition-colors",
+                            selectedLead?.id === lead.id ? "border-primary/60 bg-primary/5" : "hover:border-primary/40"
+                          )}
+                        >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <p className="text-sm font-semibold text-foreground">{lead.name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-sm font-semibold text-foreground">{lead.name}</p>
+                                {(followupCounts[lead.id] ?? 0) > 0 && (
+                                  <span className="flex items-center gap-0.5 text-[10px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 py-0.5 rounded-full">
+                                    <Flag className="h-2.5 w-2.5" />
+                                    {followupCounts[lead.id]}
+                                  </span>
+                                )}
+                              </div>
                               {lead.company && (
                                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                                   <Building2 className="h-3 w-3" />{lead.company}
@@ -387,19 +482,226 @@ export default function QoplaPage() {
                               )}
                             </div>
                             <button
-                              onClick={() => openEdit(lead)}
+                              onClick={e => openEdit(e, lead)}
                               className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
                             >
                               <Pencil className="h-3 w-3" />
                             </button>
                           </div>
-                          {lead.notes && <p className="text-xs text-muted-foreground">{lead.notes}</p>}
+
+                          {(lead.signed_services ?? []).length > 0 ? (
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide mb-1">Signerade tjänster</p>
+                              <div className="flex flex-wrap gap-1">
+                                {(lead.signed_services ?? []).map(s => (
+                                  <span key={s} className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", TJANST_COLORS[s])}>
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">Inga signerade tjänster</p>
+                          )}
+
+                          {lead.phone && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Phone className="h-3 w-3" />{lead.phone}
+                            </p>
+                          )}
+                          {lead.notes && (
+                            <p className="text-xs text-muted-foreground border-t border-border/60 pt-2">{lead.notes}</p>
+                          )}
                         </div>
                       ))}
                     </div>
+
+                    {lostLeads.length > 0 && (
+                      <div>
+                        <button
+                          onClick={() => setForlostExpanded(e => !e)}
+                          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
+                        >
+                          {forlostExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          Förlorade leads ({lostLeads.length})
+                        </button>
+
+                        {forlostExpanded && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {lostLeads.map(lead => (
+                              <div
+                                key={lead.id}
+                                onClick={() => openPanel(lead)}
+                                className="bg-card border border-border rounded-xl p-4 opacity-60 space-y-2 cursor-pointer hover:opacity-80 transition-opacity"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-sm font-semibold text-foreground">{lead.name}</p>
+                                  <button
+                                    onClick={e => openEdit(e, lead)}
+                                    className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
+                                </div>
+                                {lead.notes && <p className="text-xs text-muted-foreground">{lead.notes}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Sidopanel ── */}
+          {selectedLead && (
+            <>
+              {/* Backdrop (mobile) */}
+              <div
+                className="fixed inset-0 z-30 bg-black/20 md:hidden"
+                onClick={() => setSelectedLead(null)}
+              />
+              <div className="fixed right-0 top-0 h-full z-40 w-full max-w-sm bg-card border-l border-border shadow-xl flex flex-col md:static md:w-80 md:shrink-0 md:rounded-xl md:border md:shadow-none md:h-auto md:max-h-[85vh] md:sticky md:top-6">
+                {/* Panel header */}
+                <div className="flex items-start justify-between gap-2 p-4 border-b border-border shrink-0">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-foreground">{selectedLead.name}</p>
+                      <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full", STATUS_COLORS[selectedLead.status])}>
+                        {selectedLead.status}
+                      </span>
+                    </div>
+                    {selectedLead.company && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Building2 className="h-3 w-3" />{selectedLead.company}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setSelectedLead(null)}
+                    className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Lead info */}
+                <div className="px-4 py-3 border-b border-border shrink-0 space-y-1.5">
+                  <div className="flex flex-wrap gap-1">
+                    {selectedLead.services.map(s => (
+                      <span key={s} className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", TJANST_COLORS[s])}>
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                  {selectedLead.phone && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Phone className="h-3 w-3" />{selectedLead.phone}
+                    </p>
+                  )}
+                  {selectedLead.email && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Mail className="h-3 w-3" />{selectedLead.email}
+                    </p>
+                  )}
+                  {selectedLead.notes && (
+                    <p className="text-xs text-muted-foreground">{selectedLead.notes}</p>
                   )}
                 </div>
-              )}
+
+                {/* Comments list */}
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+                  <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    Kommentarer ({comments.length})
+                  </p>
+
+                  {comments.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-4">Inga kommentarer ännu</p>
+                  )}
+
+                  {comments.map(c => (
+                    <div key={c.id} className={cn(
+                      "rounded-lg p-2.5 space-y-1.5 border",
+                      c.needs_followup
+                        ? "border-amber-300 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-700"
+                        : "border-border bg-muted/30"
+                    )}>
+                      <div className="flex items-center gap-2 justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className="h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                            style={{ background: TEAM_FARGER[c.author] ?? "#9CA3AF" }}
+                          >
+                            {c.author[0]}
+                          </div>
+                          <span className="text-xs font-semibold text-foreground">{c.author}</span>
+                          <span className="text-[10px] text-muted-foreground">{formatTime(c.created_at)}</span>
+                        </div>
+                        <button
+                          onClick={() => toggleFollowup(c)}
+                          title={c.needs_followup ? "Ta bort uppföljningsflagga" : "Markera för uppföljning"}
+                          className={cn(
+                            "h-5 w-5 flex items-center justify-center rounded transition-colors",
+                            c.needs_followup
+                              ? "text-amber-600 hover:text-amber-700"
+                              : "text-muted-foreground hover:text-amber-500"
+                          )}
+                        >
+                          <Flag className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <p className="text-xs text-foreground leading-relaxed">{c.text}</p>
+                      {c.needs_followup && (
+                        <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                          <Flag className="h-2.5 w-2.5" /> Kräver uppföljning
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  <div ref={commentEndRef} />
+                </div>
+
+                {/* Comment form */}
+                <div className="px-4 py-3 border-t border-border shrink-0 space-y-2">
+                  <Textarea
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                    placeholder="Skriv en kommentar..."
+                    className="resize-none text-xs"
+                    rows={2}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendComment()
+                    }}
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={commentFollowup}
+                        onChange={e => setCommentFollowup(e.target.checked)}
+                        className="h-3.5 w-3.5 accent-amber-500"
+                      />
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Flag className="h-3 w-3 text-amber-500" />
+                        Kräver uppföljning
+                      </span>
+                    </label>
+                    <Button
+                      size="sm"
+                      onClick={sendComment}
+                      disabled={!commentText.trim() || sendingComment}
+                      className="gap-1.5 h-7 text-xs"
+                    >
+                      <Send className="h-3 w-3" />
+                      Skicka
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </>
           )}
         </div>
