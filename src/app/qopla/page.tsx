@@ -571,6 +571,7 @@ export default function QoplaPage() {
               "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
               selectedLead ? "translate-x-0" : "translate-x-full"
             )}>
+            {selectedLead && <>
                 {/* Panel header */}
                 <div className="flex items-start justify-between gap-2 p-4 border-b border-border shrink-0">
                   <div className="min-w-0">
@@ -707,6 +708,7 @@ export default function QoplaPage() {
                     </Button>
                   </div>
                 </div>
+            </>}
             </div>
           </>
         </div>
