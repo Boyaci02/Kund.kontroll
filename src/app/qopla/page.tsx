@@ -410,7 +410,7 @@ export default function QoplaPage() {
       {loading ? (
         <p className="text-sm text-muted-foreground py-8 text-center">Laddar...</p>
       ) : (
-        <div className={cn("flex gap-4", selectedLead ? "items-start" : "")}>
+        <div className="flex gap-4 items-start">
           {/* Main content */}
           <div className="flex-1 min-w-0">
             {tab === "aktiva" ? (
@@ -564,7 +564,7 @@ export default function QoplaPage() {
                 className="fixed inset-0 z-30 bg-black/20 md:hidden"
                 onClick={() => setSelectedLead(null)}
               />
-              <div className="fixed right-0 top-0 h-full z-40 w-full max-w-sm bg-card border-l border-border shadow-xl flex flex-col md:static md:w-80 md:shrink-0 md:rounded-xl md:border md:shadow-none md:h-auto md:max-h-[85vh] md:sticky md:top-6">
+              <div className="fixed right-0 top-0 h-full z-40 w-full max-w-sm bg-card border-l border-border shadow-2xl flex flex-col transition-transform duration-200">
                 {/* Panel header */}
                 <div className="flex items-start justify-between gap-2 p-4 border-b border-border shrink-0">
                   <div className="min-w-0">
