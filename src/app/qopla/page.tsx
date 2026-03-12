@@ -557,14 +557,20 @@ export default function QoplaPage() {
           </div>
 
           {/* ── Sidopanel ── */}
-          {selectedLead && (
-            <>
-              {/* Backdrop (mobile) */}
-              <div
-                className="fixed inset-0 z-30 bg-black/20 md:hidden"
-                onClick={() => setSelectedLead(null)}
-              />
-              <div className="fixed right-0 top-0 h-full z-40 w-full max-w-sm bg-card border-l border-border shadow-2xl flex flex-col transition-transform duration-200">
+          <>
+            {/* Backdrop */}
+            <div
+              className={cn(
+                "fixed inset-0 z-30 bg-black/30 backdrop-blur-[2px] transition-opacity duration-300",
+                selectedLead ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+              )}
+              onClick={() => setSelectedLead(null)}
+            />
+            <div className={cn(
+              "fixed right-0 top-0 h-full z-40 w-full max-w-sm bg-card border-l border-border shadow-2xl flex flex-col",
+              "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+              selectedLead ? "translate-x-0" : "translate-x-full"
+            )}>
                 {/* Panel header */}
                 <div className="flex items-start justify-between gap-2 p-4 border-b border-border shrink-0">
                   <div className="min-w-0">
@@ -702,8 +708,8 @@ export default function QoplaPage() {
                   </div>
                 </div>
               </div>
-            </>
-          )}
+            </div>
+          </>
         </div>
       )}
 
