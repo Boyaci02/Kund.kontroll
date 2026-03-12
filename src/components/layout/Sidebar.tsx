@@ -18,6 +18,7 @@ import {
   UserPlus,
   Film,
   MoreHorizontal,
+  Handshake,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "./ThemeToggle"
@@ -27,6 +28,7 @@ import { TEAM_FARGER } from "@/lib/types"
 import { useState } from "react"
 
 const EKONOMI_USERS = ["Emanuel", "Philip", "Jakob"]
+const QOPLA_USERS = ["Emanuel", "Philip", "Jakob"]
 
 function NavLink({ href, label, icon: Icon, indent, active, badge }: {
   href: string
@@ -136,6 +138,13 @@ export function Sidebar() {
           <>
             <div className="my-2 mx-1 border-t border-border/60" />
             <NavLink href="/ekonomi"    label="Ekonomi"          icon={TrendingUp}      active={pathname === "/ekonomi"} />
+          </>
+        )}
+
+        {user && QOPLA_USERS.includes(user.name) && (
+          <>
+            <div className="my-2 mx-1 border-t border-border/60" />
+            <NavLink href="/qopla"      label="Qopla"            icon={Handshake}       active={pathname === "/qopla"} />
           </>
         )}
       </nav>

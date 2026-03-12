@@ -185,6 +185,29 @@ export const PAKET_LISTA: Paket[] = [
   "Special Paket",
 ]
 
+export type QoplaStatus =
+  | "Ny lead"
+  | "Kontaktad"
+  | "Möte bokat"
+  | "Offert skickad"
+  | "Vunnen"
+  | "Förlorad"
+
+export type QoplaTjanst = "Social Media" | "Hemsida"
+
+export interface QoplaLead {
+  id: number
+  name: string
+  company?: string
+  phone?: string
+  email?: string
+  services: QoplaTjanst[]
+  signed_services?: QoplaTjanst[]
+  status: QoplaStatus
+  notes?: string
+  created_at: string
+}
+
 // Airtable Content Creation types
 export type AirtableStatus = "Todo" | "In progress" | "Done" | ""
 

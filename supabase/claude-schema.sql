@@ -87,3 +87,23 @@ create trigger comment_queue_updated_at
 
 alter table clients disable row level security;
 alter table comment_queue disable row level security;
+
+-- =====================
+-- QOPLA LEADS
+-- =====================
+
+create table if not exists qopla_leads (
+  id bigserial primary key,
+  name text not null,
+  company text,
+  phone text,
+  email text,
+  services text[] default '{}',
+  signed_services text[] default '{}',
+  status text default 'Ny lead'
+    check (status in ('Ny lead', 'Kontaktad', 'Möte bokat', 'Offert skickad', 'Vunnen', 'Förlorad')),
+  notes text,
+  created_at timestamptz default now()
+);
+
+alter table qopla_leads disable row level security;
