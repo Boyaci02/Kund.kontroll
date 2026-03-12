@@ -39,9 +39,15 @@ function migrateHemsidor(raw: unknown): HemsidorDB {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     const r = raw as Partial<HemsidorDB>
     if (r.clients || r.leads || r.tasks) {
-      // Already in new format
+      const existing = r.clients ?? INIT_HEMSIDA_CLIENTS
+      const existingIds = new Set(existing.map(c => c.id))
+      // Merge any new seed clients (id >= 10) that aren't already saved
+      const merged = [
+        ...existing,
+        ...INIT_HEMSIDA_CLIENTS.filter(c => c.id >= 10 && !existingIds.has(c.id)),
+      ]
       return {
-        clients:     r.clients     ?? INIT_HEMSIDA_CLIENTS,
+        clients:     merged,
         leads:       r.leads       ?? INIT_HEMSIDA_LEADS,
         tasks:       r.tasks       ?? INIT_HEMSIDA_TASKS,
         activity:    r.activity    ?? [],
