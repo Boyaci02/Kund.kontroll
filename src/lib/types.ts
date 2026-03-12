@@ -162,6 +162,7 @@ export const TEAM_FARGER: Record<string, string> = {
   Sami: "#DC2626",
   Matteus: "#2563EB",
   Emanuel: "#111827",
+  Ivan: "#EA580C",
   Ingen: "#9CA3AF",
 }
 

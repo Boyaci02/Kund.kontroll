@@ -1,5 +1,11 @@
 export const AUTH_KEY = "kk_auth"
 export const SHARED_PASSWORD = "syns2025"
+
+// Användare med e-post-login och individuella lösenord
+export const EXTENDED_USERS: Record<string, { name: string; password: string }> = {
+  "ivan@synsnumedia.com": { name: "Ivan", password: "syns2026" },
+}
+
 export const VALID_USERS = [
   "Philip",
   "Etienne",
@@ -39,6 +45,13 @@ export function clearAuth(): void {
 
 export async function isValidLogin(name: string, password: string): Promise<boolean> {
   const trimmed = name.trim()
+
+  // Kolla e-post-baserade användare med individuella lösenord
+  const extEntry = Object.entries(EXTENDED_USERS).find(
+    ([email]) => email.toLowerCase() === trimmed.toLowerCase()
+  )
+  if (extEntry) return password === extEntry[1].password
+
   const normalized = VALID_USERS.find(
     (u) => u.toLowerCase() === trimmed.toLowerCase()
   )
@@ -69,5 +82,9 @@ export async function isValidLogin(name: string, password: string): Promise<bool
 
 export function normalizeUserName(name: string): string {
   const trimmed = name.trim()
+  const extEntry = Object.entries(EXTENDED_USERS).find(
+    ([email]) => email.toLowerCase() === trimmed.toLowerCase()
+  )
+  if (extEntry) return extEntry[1].name
   return VALID_USERS.find((u) => u.toLowerCase() === trimmed.toLowerCase()) ?? trimmed
 }
