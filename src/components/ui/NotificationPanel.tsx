@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { X, CheckCheck, ClipboardList, UserPlus, CheckSquare, Bell } from "lucide-react"
+import { X, CheckCheck, ClipboardList, UserPlus, CheckSquare, Bell, Users } from "lucide-react"
 import { useDB } from "@/lib/store"
 import { useAuth } from "@/components/providers/AuthProvider"
 import type { AppNotification, NotifPage } from "@/lib/types"
@@ -11,6 +11,7 @@ const PAGE_ICONS: Record<NotifPage, React.ElementType> = {
   tasks: ClipboardList,
   leads: UserPlus,
   onboarding: CheckSquare,
+  kunder: Users,
 }
 
 function timeAgo(iso: string): string {
