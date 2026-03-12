@@ -707,7 +707,6 @@ export default function QoplaPage() {
                     </Button>
                   </div>
                 </div>
-              </div>
             </div>
           </>
         </div>
