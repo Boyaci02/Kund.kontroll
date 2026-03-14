@@ -36,6 +36,25 @@ export interface Kund {
   em: string // E-post
   st: Status
   notes: string
+  gmbLocationId?: string // Google Business Profile location ID, e.g. "locations/123456789"
+}
+
+export type GmbReviewStatus = "new" | "replied" | "flagged" | "forwarded"
+
+export interface GmbReview {
+  reviewId: string
+  kundId: number
+  locationId: string
+  reviewer: string
+  rating: 1 | 2 | 3 | 4 | 5
+  comment: string
+  createTime: string
+  status: GmbReviewStatus
+  replyText?: string
+  repliedAt?: string
+  flaggedAt?: string
+  forwardedAt?: string
+  internalNote?: string
 }
 
 export interface OnboardingUppgift {
@@ -136,6 +155,7 @@ export interface AppNotification {
 
 export interface DB {
   clients: Kund[]
+  gmbReviews: GmbReview[]
   obState: OnboardingTillstand
   contactLog: Record<string, "contacted" | "confirmed">
   schedule: Veckoschema | null

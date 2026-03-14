@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import { DBContext, loadDB, saveDB, getInitialDB } from "@/lib/store"
-import type { AppNotification, DB, Kund, KontaktPost, KontaktTyp, Lead, ObEnrollment, Veckoschema } from "@/lib/types"
+import type { AppNotification, DB, GmbReview, Kund, KontaktPost, KontaktTyp, Lead, ObEnrollment, Veckoschema } from "@/lib/types"
 import { SCHEMA, KONTAKTER } from "@/lib/data"
 import { supabase } from "@/lib/supabase"
 import { parseNrDates } from "@/lib/nr-parser"
@@ -563,6 +563,13 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
     [update]
   )
 
+  const updateGmbReviews = useCallback(
+    (reviews: GmbReview[]) => {
+      update((prev) => ({ ...prev, gmbReviews: reviews }))
+    },
+    [update]
+  )
+
   const markPageRead = useCallback(
     (page: string, userName: string) => {
       const now = new Date().toISOString()
@@ -602,7 +609,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DBContext.Provider
-      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads, addContact, updateContact, deleteContact, removeFromVecka, addNotification, markPageRead, enrollInOnboarding, removeFromOnboarding, updateObEnrollments }}
+      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads, addContact, updateContact, deleteContact, removeFromVecka, addNotification, markPageRead, enrollInOnboarding, removeFromOnboarding, updateObEnrollments, updateGmbReviews }}
     >
       {children}
     </DBContext.Provider>

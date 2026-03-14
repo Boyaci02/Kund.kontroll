@@ -1175,6 +1175,18 @@ export default function KundkortPage() {
               <Input value={form.em ?? ""} onChange={(e) => setForm({ ...form, em: e.target.value })} placeholder="namn@foretag.se" type="email" />
             </FormField>
             <div className="col-span-2">
+              <FormField label="GMB Location ID">
+                <Input
+                  value={form.gmbLocationId ?? ""}
+                  onChange={(e) => setForm({ ...form, gmbLocationId: e.target.value })}
+                  placeholder="locations/123456789012345678"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Hittas i Google Business Profile → Info → Dela profil → kopiera sifferdelen ur länken.
+                </p>
+              </FormField>
+            </div>
+            <div className="col-span-2">
               <FormField label="Adress">
                 <Input value={form.adr} onChange={(e) => setForm({ ...form, adr: e.target.value })} placeholder="Gatuadress, stad" />
               </FormField>

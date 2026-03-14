@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext } from "react"
-import type { AppNotification, DB, Kund, KontaktPost, Lead, ObEnrollment, OnboardingTillstand, Veckoschema } from "./types"
+import type { AppNotification, DB, GmbReview, Kund, KontaktPost, Lead, ObEnrollment, OnboardingTillstand, Veckoschema } from "./types"
 import { INIT_KUNDER } from "./data"
 
 export const DB_KEY = "kkv4"
@@ -9,6 +9,7 @@ export const DB_KEY = "kkv4"
 export function getInitialDB(): DB {
   return {
     clients: INIT_KUNDER,
+    gmbReviews: [],
     obState: {},
     contactLog: {},
     schedule: null,
@@ -64,6 +65,7 @@ export interface DBContextValue {
   enrollInOnboarding: (kundId: number, name: string, pkg: string) => void
   removeFromOnboarding: (id: number) => void
   updateObEnrollments: (enrollments: ObEnrollment[]) => void
+  updateGmbReviews: (reviews: GmbReview[]) => void
 }
 
 export const DBContext = createContext<DBContextValue | null>(null)
