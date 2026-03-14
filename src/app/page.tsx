@@ -67,20 +67,20 @@ export default function OversiktPage() {
     fetchEvents(new Date())
   }, [fetchEvents])
 
-  // General tasks (not done), sorted by endDate
+  // General tasks (not done) assigned to the logged-in user, sorted by endDate
   const myGeneralTasks = useMemo(() => {
     return tasks
-      .filter((t) => t.status !== "done")
+      .filter((t) => t.status !== "done" && t.assignee === user?.name)
       .sort((a, b) => (a.endDate || "9999") < (b.endDate || "9999") ? -1 : 1)
       .slice(0, 8)
-  }, [tasks])
+  }, [tasks, user?.name])
 
-  // Tasks for selected day
+  // Tasks for selected day assigned to the logged-in user
   const tasksForSelectedDay = useMemo(() => {
     if (selectedDay === null) return []
     const ymd = formatYMD(calendarMonth, selectedDay)
-    return tasks.filter((t) => t.endDate === ymd && t.status !== "done")
-  }, [tasks, selectedDay, calendarMonth])
+    return tasks.filter((t) => t.endDate === ymd && t.status !== "done" && t.assignee === user?.name)
+  }, [tasks, selectedDay, calendarMonth, user?.name])
 
   // Recordings for selected day
   const recordingsForSelectedDay = useMemo(() => {
