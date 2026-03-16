@@ -172,12 +172,13 @@ export default function MarketingPlanSection({ kund }: Props) {
         <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
           <Sparkles className="h-8 w-8 text-muted-foreground" />
           <div>
-            <p className="font-medium">Ingen marknadsföringsplan</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Generera en AI-driven 3-månaders plan anpassad för {kund.name}
+            <p className="font-medium">Ingen marknadsföringsplan än</p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+              Planen skapas automatiskt av systemet varje dag kl 08:00.
+              Har du precis lagt till {kund.name} i onboarding? Kom tillbaka imorgon.
             </p>
           </div>
-          <Button onClick={handleGenerate} disabled={generating} className="mt-2">
+          <Button variant="outline" size="sm" onClick={handleGenerate} disabled={generating} className="mt-2">
             {generating ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -186,7 +187,7 @@ export default function MarketingPlanSection({ kund }: Props) {
             ) : (
               <>
                 <Sparkles className="h-4 w-4 mr-2" />
-                Generera marknadsföringsplan
+                Generera nu manuellt
               </>
             )}
           </Button>

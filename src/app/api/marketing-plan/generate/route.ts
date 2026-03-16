@@ -3,14 +3,10 @@ import { supabase } from "@/lib/supabase"
 import Anthropic from "@anthropic-ai/sdk"
 import type { KundTema } from "@/lib/types"
 
-export const maxDuration = 300
-
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 function getPkgFrequency(pkg: string): string {
-  const lower = pkg.toLowerCase()
+  const lower = (pkg ?? "").toLowerCase()
   if (lower.includes("lilla")) return "8"
   if (lower.includes("mellan")) return "12"
   if (lower.includes("stora")) return "20"
@@ -31,7 +27,7 @@ function getTemaText(tema: KundTema | null | undefined): string {
     .join(", ")
 }
 
-// POST /api/marketing-plan/generate — Generera marknadsföringsplan med Claude
+// POST /api/marketing-plan/generate — Manuell fallback (snabb, utan web search)
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const { kund_id, plan_id } = body
@@ -48,119 +44,66 @@ export async function POST(req: NextRequest) {
 
   if (kundError || !kund) {
     await supabase.from("marketing_plans").update({ status: "draft" }).eq("id", plan_id)
-    return NextResponse.json(
-      { error: `Kund hittades inte (id: ${kund_id}).` },
-      { status: 404 }
-    )
+    return NextResponse.json({ error: `Kund hittades inte (id: ${kund_id}).` }, { status: 404 })
   }
 
   try {
-    // ─── Fas 1: Webbresearch ───────────────────────────────────────────────────
-    const researchRes = await client.messages.create({
-      model: "claude-opus-4-6",
-      max_tokens: 3000,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 5 } as any],
+    const pkgFrequency = getPkgFrequency(kund.pkg ?? "")
+    const temaText = getTemaText(kund.tema as KundTema | null)
+    const currentMonth = new Date().toLocaleDateString("sv-SE", { month: "long", year: "numeric" })
+
+    const message = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4000,
       messages: [
         {
           role: "user",
-          content: `Researcha restaurangen "${kund.name}"${kund.adr ? ` på adressen ${kund.adr}` : " i Sverige"}.
-
-Sök efter och sammanfatta:
-1. Deras Instagram och/eller TikTok (finns de? antal följare, typ av innehåll, senaste inlägg)
-2. Google-recensioner och betyg (genomsnitt, antal, vad gästerna berömmer eller klagar på)
-3. Hur länge de har funnits och restaurangens bakgrund
-4. Vilka liknande restauranger/konkurrenter som finns i samma stadsdel eller på samma gata
-5. Eventuella mediabevakningar, utmärkelser eller unika egenskaper
-
-Ge en detaljerad research-sammanfattning på svenska som en social media-strateg ska använda för att skapa en skräddarsydd marknadsföringsplan.`,
-        },
-      ],
-    })
-
-    // Extrahera text från research-svaret
-    const research = researchRes.content
-      .filter((c) => c.type === "text")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map((c) => (c as any).text as string)
-      .join("\n")
-      .trim()
-
-    // ─── Fas 2: Plansgenerering ────────────────────────────────────────────────
-    const pkgFrequency = getPkgFrequency(kund.pkg ?? "")
-    const temaText = getTemaText(kund.tema as KundTema | null)
-
-    const prompt = `Du är social media-strateg specialiserad på svenska restauranger.
+          content: `Du är social media-strateg specialiserad på svenska restauranger.
 Du arbetar för Syns Nu Media som producerar Instagram/TikTok/Facebook-innehåll åt restauranger.
 
 === RESTAURANGINFORMATION ===
 Namn: ${kund.name}
 Adress: ${kund.adr || "Sverige"}
 Paket: ${kund.pkg || "okänt"} (${pkgFrequency} inlägg/månad)
-Anteckningar från oss: ${kund.notes || "–"}
+Anteckningar: ${kund.notes || "–"}
 Varumärkesidentitet: ${temaText}
 
-=== RESEARCH (automatiskt insamlad) ===
-${research || "Ingen research tillgänglig – basera planen på restaurangens namn och adress."}
-
 === DIN UPPGIFT ===
-Skapa en 3-månaders social media-marknadsföringsplan specifikt för ${kund.name}.
+Skapa en 3-månaders social media-marknadsföringsplan specifikt för ${kund.name}. Startmånad: ${currentMonth}.
 
-ABSOLUTA KRAV:
-1. Planen ska vara 100% unik för ${kund.name} — omöjlig att kopiera till en annan restaurang
-2. Nämn faktiska konkurrenter som hittades i researchen och hur ${kund.name} differentierar sig
-3. Föreslå KONKRETA innehållsidéer som matchar restaurangens matkoncept, stämning och varumärke
-4. Handlingsplanen (actions) per månad ska vara VECKOVIS och plattformsspecifik (t.ex. "Vecka 1: 2 Reels på Instagram med…", "Vecka 2: TikTok-video av…")
-5. Anpassa inläggsvolym till paketet: ${pkgFrequency} inlägg/månad
-6. Ton och stil ska matcha varumärkesidentiteten
-7. Inkludera säsongsrelevanta kampanjer baserade på adress och årstid (mars 2026)
+KRAV:
+1. Planen ska kännas unik för ${kund.name} — inte generisk
+2. Föreslå konkreta innehållsidéer baserade på restaurangtyp och adress
+3. Handlingsplanen per månad ska vara veckovis och plattformsspecifik
+4. Anpassa volym till paketet: ${pkgFrequency} inlägg/månad
 
-Returnera ENBART ett JSON-objekt (ingen annan text):
+Returnera ENBART ett JSON-objekt:
 {
-  "main_goal": "Det övergripande målet för hela 3-månadsperioden",
-  "opportunity": "Den specifika möjligheten baserad på research och konkurrensläget",
-  "current_problem": "De specifika problemen identifierade i researchen",
-  "area_analysis": "Analys av faktiska konkurrenter och marknadsläge i just detta område",
-  "trend_analysis": "Säsonger och trender relevanta för just denna restaurang och plats",
+  "main_goal": "...",
+  "opportunity": "...",
+  "current_problem": "...",
+  "area_analysis": "...",
+  "trend_analysis": "...",
   "month1": {
-    "goal": "Månadens övergripande mål",
-    "subgoals": ["Specifikt delmål 1", "Specifikt delmål 2", "Specifikt delmål 3", "Specifikt delmål 4"],
-    "actions": [
-      "Vecka 1: Specifik handling med plattform och innehållstyp",
-      "Vecka 2: Specifik handling",
-      "Vecka 3: Specifik handling",
-      "Vecka 4: Specifik handling"
-    ]
-  },
-  "month2": {
     "goal": "...",
     "subgoals": ["...", "...", "...", "..."],
     "actions": ["Vecka 1: ...", "Vecka 2: ...", "Vecka 3: ...", "Vecka 4: ..."]
   },
-  "month3": {
-    "goal": "...",
-    "subgoals": ["...", "...", "...", "..."],
-    "actions": ["Vecka 1: ...", "Vecka 2: ...", "Vecka 3: ...", "Vecka 4: ..."]
-  }
-}`
-
-    const planRes = await client.messages.create({
-      model: "claude-opus-4-6",
-      max_tokens: 4000,
-      messages: [{ role: "user", content: prompt }],
+  "month2": { "goal": "...", "subgoals": ["...", "...", "...", "..."], "actions": ["Vecka 1: ...", "Vecka 2: ...", "Vecka 3: ...", "Vecka 4: ..."] },
+  "month3": { "goal": "...", "subgoals": ["...", "...", "...", "..."], "actions": ["Vecka 1: ...", "Vecka 2: ...", "Vecka 3: ...", "Vecka 4: ..."] }
+}`,
+        },
+      ],
     })
 
-    const planContent = planRes.content[0]
-    if (planContent.type !== "text") {
-      throw new Error("Oväntat svarsformat från Claude")
-    }
+    const content = message.content[0]
+    if (content.type !== "text") throw new Error("Oväntat svarsformat")
 
-    const start = planContent.text.indexOf("{")
-    const end = planContent.text.lastIndexOf("}")
-    if (start === -1 || end === -1) {
-      throw new Error("Kunde inte hitta JSON i svaret från Claude")
-    }
-    const planData = JSON.parse(planContent.text.slice(start, end + 1))
+    const start = content.text.indexOf("{")
+    const end = content.text.lastIndexOf("}")
+    if (start === -1 || end === -1) throw new Error("Kunde inte hitta JSON i svaret")
+
+    const planData = JSON.parse(content.text.slice(start, end + 1))
 
     const { data, error } = await supabase
       .from("marketing_plans")
