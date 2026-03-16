@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Sparkles, ChevronDown, ChevronUp, Pencil, Check, X, Loader2, TrendingUp, Target, AlertCircle, MapPin } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Pencil, Check, X, Loader2, TrendingUp, Target, AlertCircle, MapPin, Download } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -30,6 +30,7 @@ export default function MarketingPlanSection({ kund }: Props) {
   const [plan, setPlan] = useState<MarketingPlan | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
   const [expandedMonths, setExpandedMonths] = useState<Record<number, boolean>>({ 1: true, 2: false, 3: false })
   const [editField, setEditField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
@@ -63,6 +64,7 @@ export default function MarketingPlanSection({ kund }: Props) {
 
   async function handleGenerate() {
     setGenerating(true)
+    setGenerateError(null)
 
     // Skapa en ny plan-post med status "generating"
     const createRes = await fetch("/api/marketing-plan", {
@@ -73,21 +75,31 @@ export default function MarketingPlanSection({ kund }: Props) {
     const newPlan = await createRes.json()
     setPlan(newPlan)
 
-    // Starta generering i bakgrunden
-    fetch("/api/marketing-plan/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kund_id: kund.id, plan_id: newPlan.id }),
-    }).then(async (res) => {
-      if (res.ok) {
-        const updated = await res.json()
-        setPlan(updated)
+    // Starta generering
+    try {
+      const res = await fetch("/api/marketing-plan/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kund_id: kund.id, plan_id: newPlan.id }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        setGenerateError(result.error ?? "Generering misslyckades")
+        fetchPlan()
+      } else {
+        setPlan(result)
       }
-      setGenerating(false)
-    }).catch(() => {
-      setGenerating(false)
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : "Nätverksfel")
       fetchPlan()
-    })
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  function handleDownloadPdf() {
+    if (!plan) return
+    window.open(`/api/marketing-plan/${plan.id}/pdf?name=${encodeURIComponent(kund.name)}`, "_blank")
   }
 
   async function handleSaveField(field: string, value: string) {
@@ -199,6 +211,17 @@ export default function MarketingPlanSection({ kund }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Felmeddelande */}
+      {generateError && (
+        <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-medium">Generering misslyckades: </span>
+            {generateError}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -209,6 +232,12 @@ export default function MarketingPlanSection({ kund }: Props) {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {plan.main_goal && (
+            <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Ladda ner PDF
+            </Button>
+          )}
           {plan.status === "draft" && (
             <Button variant="outline" size="sm" onClick={() => handleStatusChange("active")}>
               Aktivera plan

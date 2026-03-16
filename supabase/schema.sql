@@ -96,6 +96,36 @@ create trigger claude_leads_updated_at
   for each row execute function update_updated_at();
 
 -- =====================
+-- KUNDER (proper tabell, ersätter app_state JSONB för clients)
+-- =====================
+create table if not exists kunder (
+  id          integer     primary key,
+  name        text        not null default '',
+  pkg         text        default '',
+  vg          text        default '',
+  ed          text        default '',
+  cc          text        default '',
+  lr          text        default '',
+  nr          text        default '',
+  ns          text        default '',
+  adr         text        default '',
+  cnt         text        default '',
+  ph          text        default '',
+  em          text        default '',
+  st          text        default '' check (st in ('AKTIV', 'INAKTIV', '')),
+  notes       text        default '',
+  tema        jsonb       default null,
+  created_at  timestamptz default now(),
+  updated_at  timestamptz default now()
+);
+
+alter table kunder disable row level security;
+
+create trigger kunder_updated_at
+  before update on kunder
+  for each row execute function update_updated_at();
+
+-- =====================
 -- MARKNADSFÖRINGSPLANER
 -- =====================
 create table if not exists marketing_plans (

@@ -1,24 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import Anthropic from "@anthropic-ai/sdk"
-import type { DB, Kund } from "@/lib/types"
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
-
-async function getKund(kundId: number): Promise<Kund | null> {
-  const { data, error } = await supabase
-    .from("app_state")
-    .select("data")
-    .eq("id", "main")
-    .single()
-
-  if (error || !data?.data) return null
-
-  const db = data.data as DB
-  return db.clients?.find((k) => k.id === kundId) ?? null
-}
 
 // POST /api/marketing-plan/generate — Generera marknadsföringsplan med Claude
 export async function POST(req: NextRequest) {
@@ -29,9 +15,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "kund_id och plan_id krävs" }, { status: 400 })
   }
 
-  const kund = await getKund(kund_id)
-  if (!kund) {
-    return NextResponse.json({ error: "Kund hittades inte" }, { status: 404 })
+  // Hämta kund direkt från kunder-tabellen (inte app_state JSONB)
+  const { data: kund, error: kundError } = await supabase
+    .from("kunder")
+    .select("*")
+    .eq("id", kund_id)
+    .single()
+
+  if (kundError || !kund) {
+    await supabase.from("marketing_plans").update({ status: "draft" }).eq("id", plan_id)
+    return NextResponse.json(
+      { error: `Kund hittades inte (id: ${kund_id}). Kontrollera att kunder-tabellen är seedat.` },
+      { status: 404 }
+    )
   }
 
   // Bygg prompt med kunddata
@@ -54,7 +50,7 @@ Analysera och skapa en 3-månaders marknadsföringsplan för denna restaurang. P
 Inkludera:
 1. Analys av restaurangbranschen i området (baserat på adress och allmän branschkunskap)
 2. Försäljningstrender att kapitalisera på (säsonger, helger, lokala event, trender)
-3. Nuläge och problem (vad hindrar tillväxt idag för en typisk restaurang utan stark social media-närvaro?)
+3. Nuläge och problem (vad hindrar tillväxt idag för en restaurang utan stark social media-närvaro?)
 4. Differentieringsmöjlighet (vad kan stå ut vs. konkurrenter i området?)
 5. Ett övergripande mål för hela 3-månaderperioden
 6. Detaljerade månadsplaner med tydliga mål och konkreta delmål
@@ -83,7 +79,7 @@ Returnera ENBART ett JSON-objekt (ingen annan text) med exakt denna struktur:
   try {
     const message = await client.messages.create({
       model: "claude-opus-4-6",
-      max_tokens: 2000,
+      max_tokens: 4000,
       messages: [{ role: "user", content: prompt }],
     })
 
@@ -92,38 +88,36 @@ Returnera ENBART ett JSON-objekt (ingen annan text) med exakt denna struktur:
       throw new Error("Oväntat svarsformat från Claude")
     }
 
-    // Extrahera JSON från svaret
-    const jsonMatch = content.text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error("Kunde inte hitta JSON i svaret")
+    // Extrahera JSON — leta efter första { och sista }
+    const start = content.text.indexOf("{")
+    const end = content.text.lastIndexOf("}")
+    if (start === -1 || end === -1) {
+      throw new Error("Kunde inte hitta JSON i svaret från Claude")
     }
-
-    const planData = JSON.parse(jsonMatch[0])
+    const planData = JSON.parse(content.text.slice(start, end + 1))
 
     // Spara planen i Supabase
     const { data, error } = await supabase
       .from("marketing_plans")
       .update({
         status: "draft",
-        main_goal: planData.main_goal,
-        opportunity: planData.opportunity,
-        current_problem: planData.current_problem,
-        area_analysis: planData.area_analysis,
-        trend_analysis: planData.trend_analysis,
-        month1_goal: planData.month1?.goal,
+        main_goal: planData.main_goal ?? "",
+        opportunity: planData.opportunity ?? "",
+        current_problem: planData.current_problem ?? "",
+        area_analysis: planData.area_analysis ?? "",
+        trend_analysis: planData.trend_analysis ?? "",
+        month1_goal: planData.month1?.goal ?? "",
         month1_subgoals: planData.month1?.subgoals ?? [],
-        month2_goal: planData.month2?.goal,
+        month2_goal: planData.month2?.goal ?? "",
         month2_subgoals: planData.month2?.subgoals ?? [],
-        month3_goal: planData.month3?.goal,
+        month3_goal: planData.month3?.goal ?? "",
         month3_subgoals: planData.month3?.subgoals ?? [],
       })
       .eq("id", plan_id)
       .select()
       .single()
 
-    if (error) {
-      throw new Error(error.message)
-    }
+    if (error) throw new Error(error.message)
 
     const row = data as Record<string, unknown>
     return NextResponse.json({
@@ -142,15 +136,11 @@ Returnera ENBART ett JSON-objekt (ingen annan text) med exakt denna struktur:
       updated_at: row.updated_at,
     })
   } catch (err) {
-    // Markera planen som misslyckad om något går fel
-    await supabase
-      .from("marketing_plans")
-      .update({ status: "draft" })
-      .eq("id", plan_id)
+    const errorMsg = err instanceof Error ? err.message : "Generering misslyckades"
+    console.error("[marketing-plan/generate] error:", errorMsg)
 
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Generering misslyckades" },
-      { status: 500 }
-    )
+    await supabase.from("marketing_plans").update({ status: "draft" }).eq("id", plan_id)
+
+    return NextResponse.json({ error: errorMsg }, { status: 500 })
   }
 }

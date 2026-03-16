@@ -7,6 +7,30 @@ import { SCHEMA, KONTAKTER } from "@/lib/data"
 import { supabase } from "@/lib/supabase"
 import { parseNrDates } from "@/lib/nr-parser"
 
+// ── Kunder-tabell helpers ──────────────────────────────────────────────────────
+function kundToRow(k: Kund) {
+  return {
+    id: k.id, name: k.name, pkg: k.pkg ?? "", vg: k.vg ?? "", ed: k.ed ?? "",
+    cc: k.cc ?? "", lr: k.lr ?? "", nr: k.nr ?? "", ns: k.ns ?? "",
+    adr: k.adr ?? "", cnt: k.cnt ?? "", ph: k.ph ?? "", em: k.em ?? "",
+    st: k.st ?? "", notes: k.notes ?? "", tema: k.tema ?? null,
+  }
+}
+
+function rowToKund(row: Record<string, unknown>): Kund {
+  return {
+    id: row.id as number, name: (row.name as string) ?? "",
+    pkg: (row.pkg as Kund["pkg"]) ?? "", vg: (row.vg as string) ?? "",
+    ed: (row.ed as string) ?? "", cc: (row.cc as string) ?? "",
+    lr: (row.lr as string) ?? "", nr: (row.nr as string) ?? "",
+    ns: (row.ns as string) ?? "", adr: (row.adr as string) ?? "",
+    cnt: (row.cnt as string) ?? "", ph: (row.ph as string) ?? "",
+    em: (row.em as string) ?? "", st: (row.st as Kund["st"]) ?? "",
+    notes: (row.notes as string) ?? "",
+    tema: row.tema ? (row.tema as Kund["tema"]) : undefined,
+  }
+}
+
 // ── Onboarding-state: separat Supabase-rad för att undvika överskrivning ──────
 async function saveObData(db: { obState: DB["obState"]; obEnrollments: DB["obEnrollments"] }) {
   await supabase
@@ -63,15 +87,21 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
       setDB(local)
       dbRef.current = local
 
-      // 2. Hämta från Supabase — main + ob_state parallellt
-      const [mainRes, obRes] = await Promise.all([
+      // 2. Hämta från Supabase — main + ob_state + kunder parallellt
+      const [mainRes, obRes, kunderRes] = await Promise.all([
         supabase.from("app_state").select("data").eq("id", "main").single(),
         supabase.from("app_state").select("data").eq("id", "ob_state").single(),
+        supabase.from("kunder").select("*").order("id"),
       ])
 
       let current = local
       if (!mainRes.error && mainRes.data?.data && Object.keys(mainRes.data.data).length > 0) {
         current = mainRes.data.data as DB
+      }
+
+      // Kunder-tabell: använd som auktoritativ källa för clients
+      if (!kunderRes.error && kunderRes.data && kunderRes.data.length > 0) {
+        current = { ...current, clients: kunderRes.data.map(rowToKund) }
       }
 
       // ob_state-raden är auktoritativ för onboarding — överskriver aldrig av main-reset
@@ -115,6 +145,12 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
           clients: [...current.clients, { id: 38, name: "Syns Nu", pkg: "", vg: "", ed: "", cc: "", lr: "", nr: "", ns: "", adr: "", cnt: "Internt", ph: "", em: "", st: "AKTIV", notes: "Internt företag" }],
           nextId: Math.max(current.nextId, 39),
         }
+      }
+
+      // Auto-migrering: seed kunder-tabellen om den är tom
+      if (!kunderRes.error && (!kunderRes.data || kunderRes.data.length === 0) && current.clients.length > 0) {
+        console.log("[migration] Seedar kunder-tabellen från app_state...")
+        await supabase.from("kunder").upsert(current.clients.map(kundToRow))
       }
 
       // ── Boknings-refresh: kunder med nr-datum 2 veckor framåt (daglig) ─────────
@@ -287,9 +323,12 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   const addKund = useCallback(
     (kund: Omit<Kund, "id">) => {
+      const newKund = { ...kund, id: dbRef.current.nextId }
+      supabase.from("kunder").insert(kundToRow(newKund))
+        .then((r) => { if (r?.error) console.error("[sync:kunder] insert failed:", r.error) })
       update((prev) => ({
         ...prev,
-        clients: [...prev.clients, { ...kund, id: prev.nextId }],
+        clients: [...prev.clients, newKund],
         nextId: prev.nextId + 1,
       }))
     },
@@ -298,6 +337,8 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   const updateKund = useCallback(
     (kund: Kund) => {
+      supabase.from("kunder").upsert(kundToRow(kund))
+        .then((r) => { if (r?.error) console.error("[sync:kunder] upsert failed:", r.error) })
       update((prev) => {
         const old = prev.clients.find((c) => c.id === kund.id)
         const nameChanged = old && old.name !== kund.name
@@ -324,6 +365,8 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   const deleteKund = useCallback(
     (id: number) => {
+      supabase.from("kunder").delete().eq("id", id)
+        .then((r) => { if (r?.error) console.error("[sync:kunder] delete failed:", r.error) })
       update((prev) => {
         const kund = prev.clients.find((c) => c.id === id)
         let schedule = prev.schedule
