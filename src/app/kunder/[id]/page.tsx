@@ -61,7 +61,7 @@ import { useTask } from "@/components/providers/TaskProvider"
 import { useCf } from "@/components/providers/CfProvider"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import type { Kund, Paket, Status } from "@/lib/types"
+import type { Kund, KundTema, Paket, Status } from "@/lib/types"
 import { TEAM_MEDLEMMAR, PAKET_LISTA } from "@/lib/types"
 import type { Task, TaskStatus, TaskPriority } from "@/lib/task-types"
 import { STATUS_LABELS } from "@/lib/task-types"
@@ -583,6 +583,9 @@ export default function KundkortPage() {
 
   const [notes, setNotes] = useState(kund?.notes ?? "")
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const TEMA_EMPTY: KundTema = { musik: "", kansla: "", typ: "", farg: "", typsnitt: "" }
+  const [tema, setTema] = useState<KundTema>(kund?.tema ?? TEMA_EMPTY)
+  const temaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [taskModalOpen, setTaskModalOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Partial<Task> | null>(null)
@@ -678,6 +681,18 @@ export default function KundkortPage() {
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notes])
+
+  // Autosave tema
+  useEffect(() => {
+    if (!kund) return
+    if (temaTimer.current) clearTimeout(temaTimer.current)
+    temaTimer.current = setTimeout(() => {
+      const changed = (Object.keys(tema) as (keyof KundTema)[]).some(k => tema[k] !== (kund.tema?.[k] ?? ""))
+      if (changed) updateKund({ ...kund, tema })
+    }, 2000)
+    return () => { if (temaTimer.current) clearTimeout(temaTimer.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tema])
 
   function handleSaveEdit() {
     if (!form.name.trim()) { toast.error("Ange ett kundnamn"); return }
@@ -998,6 +1013,35 @@ export default function KundkortPage() {
               rows={5}
               className="resize-none text-sm"
             />
+          </div>
+
+          {/* Tema */}
+          <div className="rounded-2xl border border-border bg-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tema</h2>
+              <span className="text-[10px] text-muted-foreground/60">Sparas automatiskt</span>
+            </div>
+            <div className="space-y-3">
+              {([
+                { key: "musik",    label: "Musik" },
+                { key: "kansla",   label: "Känsla" },
+                { key: "typ",      label: "Typ av video" },
+                { key: "farg",     label: "Färg" },
+                { key: "typsnitt", label: "Typsnitt" },
+              ] as { key: keyof KundTema; label: string }[]).map(({ key, label }) => (
+                <div key={key}>
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                    {label}
+                  </label>
+                  <Input
+                    value={tema[key]}
+                    onChange={(e) => setTema(prev => ({ ...prev, [key]: e.target.value }))}
+                    placeholder={`Ange ${label.toLowerCase()}...`}
+                    className="text-sm h-8"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

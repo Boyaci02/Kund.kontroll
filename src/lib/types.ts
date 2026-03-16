@@ -20,6 +20,14 @@ export type TeamMedlem =
   | "Ingen"
   | ""
 
+export interface KundTema {
+  musik: string
+  kansla: string
+  typ: string
+  farg: string
+  typsnitt: string
+}
+
 export interface Kund {
   id: number
   name: string
@@ -37,6 +45,7 @@ export interface Kund {
   st: Status
   notes: string
   gmbLocationId?: string // Google Business Profile location ID, e.g. "locations/123456789"
+  tema?: KundTema
 }
 
 export type GmbReviewStatus = "new" | "replied" | "flagged" | "forwarded"
