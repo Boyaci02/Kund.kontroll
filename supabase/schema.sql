@@ -94,3 +94,31 @@ create trigger claude_tasks_updated_at
 create trigger claude_leads_updated_at
   before update on claude_leads
   for each row execute function update_updated_at();
+
+-- =====================
+-- MARKNADSFÖRINGSPLANER
+-- =====================
+create table if not exists marketing_plans (
+  id              uuid        default gen_random_uuid() primary key,
+  kund_id         integer     not null,
+  status          text        default 'draft' check (status in ('generating', 'draft', 'active', 'completed')),
+  main_goal       text,
+  opportunity     text,
+  current_problem text,
+  area_analysis   text,
+  trend_analysis  text,
+  month1_goal     text,
+  month1_subgoals jsonb       default '[]'::jsonb,
+  month2_goal     text,
+  month2_subgoals jsonb       default '[]'::jsonb,
+  month3_goal     text,
+  month3_subgoals jsonb       default '[]'::jsonb,
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
+);
+
+alter table marketing_plans disable row level security;
+
+create trigger marketing_plans_updated_at
+  before update on marketing_plans
+  for each row execute function update_updated_at();

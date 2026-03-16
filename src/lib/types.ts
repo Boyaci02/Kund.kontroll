@@ -247,6 +247,28 @@ export interface QoplaLead {
   created_at: string
 }
 
+// Marknadsföringsplan
+export interface MonthPlan {
+  goal: string
+  subgoals: string[]
+}
+
+export interface MarketingPlan {
+  id: string
+  kund_id: number
+  status: "generating" | "draft" | "active" | "completed"
+  main_goal: string
+  opportunity: string
+  current_problem: string
+  area_analysis: string
+  trend_analysis: string
+  month1: MonthPlan
+  month2: MonthPlan
+  month3: MonthPlan
+  created_at: string
+  updated_at: string
+}
+
 // Airtable Content Creation types
 export type AirtableStatus = "Todo" | "In progress" | "Done" | ""
 

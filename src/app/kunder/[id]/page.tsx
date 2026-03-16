@@ -52,7 +52,9 @@ import {
   Eye,
   X,
   Info,
+  Sparkles,
 } from "lucide-react"
+import MarketingPlanSection from "@/components/MarketingPlanSection"
 import { supabase } from "@/lib/supabase"
 import { newRow } from "@/lib/editor-types"
 import type { EditorRow } from "@/lib/editor-types"
@@ -667,6 +669,8 @@ export default function KundkortPage() {
     )
   }
 
+  const marketingPlanRef = useRef<HTMLDivElement>(null)
+
   const obState = db.obState[id] ?? {}
   const allTasks = OB_STEG.flatMap((s) => s.tasks)
   const totalTasks = allTasks.length
@@ -856,6 +860,15 @@ export default function KundkortPage() {
                         </label>
                       )
                     })}
+                    {steg.n === 3 && (
+                      <button
+                        onClick={() => marketingPlanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                        className="mt-1.5 flex items-center gap-1.5 text-[11px] text-blue-600 hover:text-blue-700 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors w-full"
+                      >
+                        <Sparkles className="h-3 w-3 shrink-0" />
+                        Se marknadsföringsplan för {kund.name} →
+                      </button>
+                    )}
                   </div>
                 </details>
               )
@@ -936,6 +949,17 @@ export default function KundkortPage() {
           )}
         </div>
 
+      </div>
+
+      {/* ── Marknadsföringsplan ── */}
+      <div ref={marketingPlanRef} className="rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
+          <Sparkles className="h-4 w-4 text-blue-500" />
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Marknadsföringsplan</h2>
+        </div>
+        <div className="p-5">
+          <MarketingPlanSection kund={kund} />
+        </div>
       </div>
 
       {/* ── Editor Pipeline (full width) ── */}
