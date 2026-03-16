@@ -51,6 +51,7 @@ import {
   Download,
   Eye,
   X,
+  Info,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { newRow } from "@/lib/editor-types"
@@ -586,6 +587,7 @@ export default function KundkortPage() {
   const TEMA_EMPTY: KundTema = { musik: "", kansla: "", typ: "", farg: "", typsnitt: "" }
   const [tema, setTema] = useState<KundTema>(kund?.tema ?? TEMA_EMPTY)
   const temaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [taskModalOpen, setTaskModalOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Partial<Task> | null>(null)
@@ -766,6 +768,10 @@ export default function KundkortPage() {
             <Bell className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Påminn teamet</span>
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setSidebarOpen(true)} className="gap-1.5">
+            <Info className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Detaljer</span>
+          </Button>
           <Button variant="outline" size="sm" onClick={openEdit} className="gap-1.5">
             <Pencil className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Redigera</span>
@@ -773,8 +779,8 @@ export default function KundkortPage() {
         </div>
       </div>
 
-      {/* ── Main 2-column grid ── */}
-      <div className="grid lg:grid-cols-[1fr_320px] gap-5 items-start">
+      {/* ── Main content (full width) ── */}
+      <div>
 
         {/* LEFT: Onboarding + Tasks combined */}
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -930,120 +936,6 @@ export default function KundkortPage() {
           )}
         </div>
 
-        {/* RIGHT: Info + Notes */}
-        <div className="space-y-4">
-
-          {/* Kundinfo + Inspelningar */}
-          <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Info</h2>
-
-            <div className="space-y-2">
-              {kund.cnt && (
-                <div className="flex items-center gap-2.5">
-                  <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-sm text-foreground">{kund.cnt}</span>
-                </div>
-              )}
-              {kund.ph && (
-                <div className="flex items-center gap-2.5">
-                  <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <a href={`tel:${kund.ph}`} className="text-sm text-foreground hover:text-primary transition-colors">{kund.ph}</a>
-                </div>
-              )}
-              {kund.em && (
-                <div className="flex items-center gap-2.5">
-                  <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <a href={`mailto:${kund.em}`} className="text-sm text-primary hover:underline truncate">{kund.em}</a>
-                </div>
-              )}
-              {kund.adr && (
-                <div className="flex items-start gap-2.5">
-                  <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                  <span className="text-sm text-muted-foreground leading-relaxed">{kund.adr}</span>
-                </div>
-              )}
-            </div>
-
-            {(kund.lr || kund.nr || kund.ns) && (
-              <>
-                <div className="border-t border-border" />
-                <div className="space-y-2.5">
-                  {kund.lr && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span className="text-[10px] uppercase tracking-wider">Senaste</span>
-                      </div>
-                      <span className="text-sm font-medium text-foreground">{kund.lr}</span>
-                    </div>
-                  )}
-                  {kund.nr && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-primary">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span className="text-[10px] uppercase tracking-wider">Nästa</span>
-                      </div>
-                      <span className="text-sm font-semibold text-foreground">{kund.nr}</span>
-                    </div>
-                  )}
-                  {kund.ns && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-amber-500">
-                        <MessageSquare className="h-3.5 w-3.5" />
-                        <span className="text-[10px] uppercase tracking-wider">Nästa SMS</span>
-                      </div>
-                      <span className="text-sm text-foreground">{kund.ns}</span>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Notes */}
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Anteckningar</h2>
-              <span className="text-[10px] text-muted-foreground/60">Sparas automatiskt</span>
-            </div>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Skriv anteckningar om kunden här..."
-              rows={5}
-              className="resize-none text-sm"
-            />
-          </div>
-
-          {/* Tema */}
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tema</h2>
-              <span className="text-[10px] text-muted-foreground/60">Sparas automatiskt</span>
-            </div>
-            <div className="space-y-3">
-              {([
-                { key: "musik",    label: "Musik" },
-                { key: "kansla",   label: "Känsla" },
-                { key: "typ",      label: "Typ av video" },
-                { key: "farg",     label: "Färg" },
-                { key: "typsnitt", label: "Typsnitt" },
-              ] as { key: keyof KundTema; label: string }[]).map(({ key, label }) => (
-                <div key={key}>
-                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
-                    {label}
-                  </label>
-                  <Input
-                    value={tema[key]}
-                    onChange={(e) => setTema(prev => ({ ...prev, [key]: e.target.value }))}
-                    placeholder={`Ange ${label.toLowerCase()}...`}
-                    className="text-sm h-8"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* ── Editor Pipeline (full width) ── */}
@@ -1247,6 +1139,142 @@ export default function KundkortPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Sidebar overlay ── */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* ── Sidebar panel ── */}
+      <div className={cn(
+        "fixed top-0 right-0 h-full w-80 z-50 bg-background border-l border-border shadow-2xl flex flex-col transition-transform duration-300 ease-in-out",
+        sidebarOpen ? "translate-x-0" : "translate-x-full"
+      )}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+          <h2 className="text-sm font-semibold text-foreground">Detaljer</h2>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+          {/* Info */}
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-4">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Info</h3>
+            <div className="space-y-2">
+              {kund.cnt && (
+                <div className="flex items-center gap-2.5">
+                  <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-foreground">{kund.cnt}</span>
+                </div>
+              )}
+              {kund.ph && (
+                <div className="flex items-center gap-2.5">
+                  <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <a href={`tel:${kund.ph}`} className="text-sm text-foreground hover:text-primary transition-colors">{kund.ph}</a>
+                </div>
+              )}
+              {kund.em && (
+                <div className="flex items-center gap-2.5">
+                  <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <a href={`mailto:${kund.em}`} className="text-sm text-primary hover:underline truncate">{kund.em}</a>
+                </div>
+              )}
+              {kund.adr && (
+                <div className="flex items-start gap-2.5">
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <span className="text-sm text-muted-foreground leading-relaxed">{kund.adr}</span>
+                </div>
+              )}
+            </div>
+            {(kund.lr || kund.nr || kund.ns) && (
+              <>
+                <div className="border-t border-border" />
+                <div className="space-y-2.5">
+                  {kund.lr && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span className="text-[10px] uppercase tracking-wider">Senaste</span>
+                      </div>
+                      <span className="text-sm font-medium text-foreground">{kund.lr}</span>
+                    </div>
+                  )}
+                  {kund.nr && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-primary">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span className="text-[10px] uppercase tracking-wider">Nästa</span>
+                      </div>
+                      <span className="text-sm font-semibold text-foreground">{kund.nr}</span>
+                    </div>
+                  )}
+                  {kund.ns && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-amber-500">
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <span className="text-[10px] uppercase tracking-wider">Nästa SMS</span>
+                      </div>
+                      <span className="text-sm text-foreground">{kund.ns}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Anteckningar */}
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Anteckningar</h3>
+              <span className="text-[10px] text-muted-foreground/60">Sparas automatiskt</span>
+            </div>
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Skriv anteckningar om kunden här..."
+              rows={5}
+              className="resize-none text-sm"
+            />
+          </div>
+
+          {/* Tema */}
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tema</h3>
+              <span className="text-[10px] text-muted-foreground/60">Sparas automatiskt</span>
+            </div>
+            <div className="space-y-3">
+              {([
+                { key: "musik",    label: "Musik" },
+                { key: "kansla",   label: "Känsla" },
+                { key: "typ",      label: "Typ av video" },
+                { key: "farg",     label: "Färg" },
+                { key: "typsnitt", label: "Typsnitt" },
+              ] as { key: keyof KundTema; label: string }[]).map(({ key, label }) => (
+                <div key={key}>
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                    {label}
+                  </label>
+                  <Input
+                    value={tema[key]}
+                    onChange={(e) => setTema(prev => ({ ...prev, [key]: e.target.value }))}
+                    placeholder={`Ange ${label.toLowerCase()}...`}
+                    className="text-sm h-8"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </div>
     </div>
   )
 }
