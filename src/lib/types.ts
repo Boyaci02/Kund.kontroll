@@ -251,6 +251,7 @@ export interface QoplaLead {
 export interface MonthPlan {
   goal: string
   subgoals: string[]
+  actions: string[]
 }
 
 export interface MarketingPlan {

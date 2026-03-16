@@ -15,14 +15,17 @@ function toMarketingPlan(row: Record<string, unknown>): MarketingPlan {
     month1: {
       goal: (row.month1_goal as string) ?? "",
       subgoals: (row.month1_subgoals as string[]) ?? [],
+      actions: (row.month1_actions as string[]) ?? [],
     },
     month2: {
       goal: (row.month2_goal as string) ?? "",
       subgoals: (row.month2_subgoals as string[]) ?? [],
+      actions: (row.month2_actions as string[]) ?? [],
     },
     month3: {
       goal: (row.month3_goal as string) ?? "",
       subgoals: (row.month3_subgoals as string[]) ?? [],
+      actions: (row.month3_actions as string[]) ?? [],
     },
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,

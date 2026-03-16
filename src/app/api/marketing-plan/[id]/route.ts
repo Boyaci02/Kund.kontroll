@@ -23,14 +23,17 @@ export async function PATCH(
   if (body.month1) {
     if (body.month1.goal !== undefined) update.month1_goal = body.month1.goal
     if (body.month1.subgoals !== undefined) update.month1_subgoals = body.month1.subgoals
+    if (body.month1.actions !== undefined) update.month1_actions = body.month1.actions
   }
   if (body.month2) {
     if (body.month2.goal !== undefined) update.month2_goal = body.month2.goal
     if (body.month2.subgoals !== undefined) update.month2_subgoals = body.month2.subgoals
+    if (body.month2.actions !== undefined) update.month2_actions = body.month2.actions
   }
   if (body.month3) {
     if (body.month3.goal !== undefined) update.month3_goal = body.month3.goal
     if (body.month3.subgoals !== undefined) update.month3_subgoals = body.month3.subgoals
+    if (body.month3.actions !== undefined) update.month3_actions = body.month3.actions
   }
 
   const { data, error } = await supabase
@@ -57,14 +60,17 @@ export async function PATCH(
     month1: {
       goal: (row.month1_goal as string) ?? "",
       subgoals: (row.month1_subgoals as string[]) ?? [],
+      actions: (row.month1_actions as string[]) ?? [],
     },
     month2: {
       goal: (row.month2_goal as string) ?? "",
       subgoals: (row.month2_subgoals as string[]) ?? [],
+      actions: (row.month2_actions as string[]) ?? [],
     },
     month3: {
       goal: (row.month3_goal as string) ?? "",
       subgoals: (row.month3_subgoals as string[]) ?? [],
+      actions: (row.month3_actions as string[]) ?? [],
     },
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,

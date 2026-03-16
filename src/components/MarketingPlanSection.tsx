@@ -110,9 +110,9 @@ export default function MarketingPlanSection({ kund }: Props) {
 
     if (field.startsWith("month")) {
       const month = field.split("_")[0] // month1, month2, month3
-      const part = field.split("_")[1]  // goal eller subgoals
-      if (part === "subgoals") {
-        body[month] = { subgoals: value.split("\n").map((s) => s.trim()).filter(Boolean) }
+      const part = field.split("_").slice(1).join("_")  // goal, subgoals eller actions
+      if (part === "subgoals" || part === "actions") {
+        body[month] = { [part]: value.split("\n").map((s) => s.trim()).filter(Boolean) }
       } else {
         body[month] = { goal: value }
       }
@@ -438,6 +438,66 @@ export default function MarketingPlanSection({ kund }: Props) {
                               {i + 1}
                             </span>
                             {subgoal}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Handlingsplan */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Handlingsplan
+                    </span>
+                    {editField !== `${monthKey}_actions` && (
+                      <button
+                        onClick={() =>
+                          startEdit(
+                            `${monthKey}_actions`,
+                            (monthData.actions ?? []).join("\n")
+                          )
+                        }
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {editField === `${monthKey}_actions` ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        rows={5}
+                        placeholder="En handling per rad (t.ex. Vecka 1: Publicera 2 Reels...)"
+                        className="text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">En handling per rad</p>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleSaveField(`${monthKey}_actions`, editValue)}
+                          disabled={saving}
+                        >
+                          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditField(null)}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {(monthData.actions ?? []).length === 0 ? (
+                        <li className="text-sm text-muted-foreground italic">Ingen handlingsplan</li>
+                      ) : (
+                        (monthData.actions ?? []).map((action, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm">
+                            <span className="mt-0.5 text-blue-500 shrink-0">▶</span>
+                            {action}
                           </li>
                         ))
                       )}

@@ -108,6 +108,32 @@ const styles = StyleSheet.create({
     color: "#333333",
     flex: 1,
   },
+  actionLabel: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    color: "#aaaaaa",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  actionRow: {
+    flexDirection: "row",
+    marginBottom: 4,
+    alignItems: "flex-start",
+  },
+  actionBullet: {
+    fontSize: 9,
+    color: "#2563eb",
+    width: 14,
+    marginTop: 1,
+  },
+  actionText: {
+    fontSize: 9,
+    lineHeight: 1.5,
+    color: "#444444",
+    flex: 1,
+  },
   // Two-column layout for analysis
   twoCol: {
     flexDirection: "row",
@@ -152,10 +178,13 @@ interface PlanRow {
   trend_analysis: string
   month1_goal: string
   month1_subgoals: string[]
+  month1_actions: string[]
   month2_goal: string
   month2_subgoals: string[]
+  month2_actions: string[]
   month3_goal: string
   month3_subgoals: string[]
+  month3_actions: string[]
   created_at: string
 }
 
@@ -163,9 +192,9 @@ function MarketingPlanPDF({ plan, name }: { plan: PlanRow; name: string }) {
   const date = new Date().toLocaleDateString("sv-SE", { month: "long", year: "numeric" })
 
   const months = [
-    { label: "Månad 1", goal: plan.month1_goal, subgoals: plan.month1_subgoals ?? [] },
-    { label: "Månad 2", goal: plan.month2_goal, subgoals: plan.month2_subgoals ?? [] },
-    { label: "Månad 3", goal: plan.month3_goal, subgoals: plan.month3_subgoals ?? [] },
+    { label: "Månad 1", goal: plan.month1_goal, subgoals: plan.month1_subgoals ?? [], actions: plan.month1_actions ?? [] },
+    { label: "Månad 2", goal: plan.month2_goal, subgoals: plan.month2_subgoals ?? [], actions: plan.month2_actions ?? [] },
+    { label: "Månad 3", goal: plan.month3_goal, subgoals: plan.month3_subgoals ?? [], actions: plan.month3_actions ?? [] },
   ]
 
   return React.createElement(
@@ -230,11 +259,24 @@ function MarketingPlanPDF({ plan, name }: { plan: PlanRow; name: string }) {
             ...(month.subgoals ?? []).map((sg, i) =>
               React.createElement(
                 View,
-                { key: i, style: styles.subgoalRow },
+                { key: `sg-${i}`, style: styles.subgoalRow },
                 React.createElement(Text, { style: styles.subgoalNum }, `${i + 1}.`),
                 React.createElement(Text, { style: styles.subgoalText }, sg)
               )
-            )
+            ),
+            ...(month.actions && month.actions.length > 0
+              ? [
+                  React.createElement(Text, { key: "action-label", style: styles.actionLabel }, "Handlingsplan"),
+                  ...(month.actions ?? []).map((action, i) =>
+                    React.createElement(
+                      View,
+                      { key: `act-${i}`, style: styles.actionRow },
+                      React.createElement(Text, { style: styles.actionBullet }, "▶"),
+                      React.createElement(Text, { style: styles.actionText }, action)
+                    )
+                  ),
+                ]
+              : [])
           )
         )
       ),
