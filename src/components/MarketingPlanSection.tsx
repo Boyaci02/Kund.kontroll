@@ -198,12 +198,29 @@ export default function MarketingPlanSection({ kund }: Props) {
   if (plan.status === "generating") {
     return (
       <Card>
-        <CardContent className="flex items-center gap-3 py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-          <div>
-            <p className="font-medium">Analyserar {kund.name}...</p>
-            <p className="text-sm text-muted-foreground">Claude tar fram en skräddarsydd marknadsföringsplan</p>
+        <CardContent className="flex items-center justify-between py-6">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+            <div>
+              <p className="font-medium">Analyserar {kund.name}...</p>
+              <p className="text-sm text-muted-foreground">Claude tar fram en skräddarsydd marknadsföringsplan</p>
+            </div>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              await fetch(`/api/marketing-plan/${plan.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "draft" }),
+              })
+              fetchPlan()
+            }}
+          >
+            <X className="h-3.5 w-3.5 mr-1" />
+            Avbryt
+          </Button>
         </CardContent>
       </Card>
     )
