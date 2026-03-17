@@ -241,7 +241,7 @@ export const dailyMarketingPlans = schedules.task({
       .select("kund_id")
       .in("kund_id", kundIds)
 
-    const withPlan = new Set((existingPlans ?? []).map((p) => p.kund_id as number))
+    const withPlan = new Set((existingPlans ?? []).map((p: { kund_id: number }) => p.kund_id))
     const missing = enrollments.filter((e) => !withPlan.has(e.kundId))
 
     logger.info(`${missing.length} kunder saknar marknadsföringsplan`)
