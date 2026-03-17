@@ -27,7 +27,8 @@ function getTemaText(tema: Record<string, string> | null | undefined): string {
 }
 
 async function generatePlanForKund(
-  supabase: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
   kund: Record<string, unknown>
 ): Promise<void> {
   const kundId = kund.id as number
@@ -141,7 +142,7 @@ Returnera ENBART ett JSON-objekt (ingen annan text):
   const planData = JSON.parse(planContent.text.slice(start, end + 1))
 
   // ─── Spara planen i Supabase ────────────────────────────────────────────────
-  const { error } = await supabase.from("marketing_plans").insert({
+  const { data: savedPlan, error } = await supabase.from("marketing_plans").insert({
     kund_id: kundId,
     status: "draft",
     main_goal: planData.main_goal ?? "",
@@ -158,11 +159,44 @@ Returnera ENBART ett JSON-objekt (ingen annan text):
     month3_goal: planData.month3?.goal ?? "",
     month3_subgoals: planData.month3?.subgoals ?? [],
     month3_actions: planData.month3?.actions ?? [],
-  })
+  }).select("id").single()
 
   if (error) throw new Error(`Supabase-fel: ${error.message}`)
 
   logger.info(`Plan sparad för ${name}`)
+
+  // ─── Generera PDF och spara som fil under Filer & dokument ──────────────────
+  const kundKontrollUrl = process.env.KUND_KONTROLL_URL
+  if (kundKontrollUrl && savedPlan?.id) {
+    try {
+      const pdfRes = await fetch(
+        `${kundKontrollUrl}/api/marketing-plan/${savedPlan.id}/pdf?name=${encodeURIComponent(name)}`
+      )
+      if (pdfRes.ok) {
+        const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer())
+        const filePath = `${kundId}/${Date.now()}-marknadsplan.pdf`
+        const fileName = `Marknadsplan - ${name}.pdf`
+
+        const { error: uploadError } = await supabase.storage
+          .from("kund-filer")
+          .upload(filePath, pdfBuffer, { contentType: "application/pdf" })
+
+        if (!uploadError) {
+          await supabase.from("customer_files").insert({
+            kund_id: kundId,
+            name: fileName,
+            path: filePath,
+            size: pdfBuffer.length,
+          })
+          logger.info(`PDF sparad för ${name}`)
+        } else {
+          logger.warn(`Kunde inte ladda upp PDF för ${name}: ${uploadError.message}`)
+        }
+      }
+    } catch (pdfErr) {
+      logger.warn(`PDF-generering misslyckades för ${name}: ${pdfErr}`)
+    }
+  }
 }
 
 export const dailyMarketingPlans = schedules.task({
@@ -172,7 +206,8 @@ export const dailyMarketingPlans = schedules.task({
   run: async () => {
     logger.info("Daglig marknadsplansgenerering startar")
 
-    const supabase = createClient(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase: any = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
