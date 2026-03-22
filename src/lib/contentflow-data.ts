@@ -1,4 +1,4 @@
-import type { CFClient, CFClientState, CFFilter, CFSortCol, CFColumn } from "./contentflow-types"
+import type { CFClient, CFClientState, CFFilter, CFSortCol, CFColumn, CFTeam } from "./contentflow-types"
 import type { Veckoschema } from "./types"
 
 export const CF_COLORS = [
@@ -37,7 +37,6 @@ export const FILTER_LABELS: Record<string, string> = {
   inprogress: "Pågår",
   review:     "Granskning",
   delivered:  "Levererat",
-  nodate:     "Ej planerade",
 }
 
 export const WEEK_LABELS: Record<string, string> = {
@@ -88,12 +87,12 @@ export function parseNr(nr: string): Date | null {
   return d
 }
 
-/** Content-deadline = inspelningsdatum − 7 dagar */
+/** Content-deadline = inspelningsdatum − 4 dagar */
 export function contentDeadline(nr: string): Date | null {
   const rec = parseNr(nr)
   if (!rec) return null
   const d = new Date(rec)
-  d.setDate(d.getDate() - 7)
+  d.setDate(d.getDate() - 4)
   return d
 }
 
@@ -126,6 +125,7 @@ export function defaultCFState(): CFClientState {
     contentBoard: { columns: [] as CFColumn[] },
     contentTable: [],
     assignee: null,
+    deliveredAt: null,
   }
 }
 
@@ -139,7 +139,6 @@ export function cfCounts(clients: CFClient[]) {
     inprogress: clients.filter(c => c.s === "inprogress").length,
     review:     clients.filter(c => c.s === "review").length,
     delivered:  clients.filter(c => c.s === "delivered").length,
-    nodate:     clients.filter(c => !parseNr(c.recordingDate) && c.s !== "delivered").length,
   }
 }
 
@@ -152,6 +151,7 @@ export function cfGetList(
   sortCol: CFSortCol,
   sortDir: 1 | -1,
   filterAssignee: number | null,
+  filterTeam: CFTeam | null = null,
 ): CFClient[] {
   let l = [...clients]
 
@@ -162,14 +162,17 @@ export function cfGetList(
       (c.tag || "").toLowerCase().includes(lq),
     )
   }
-  if (filterAssignee != null) l = l.filter(c => c.assignee === filterAssignee)
+  if (filterTeam != null) {
+    l = l.filter(c => c.assignee != null && filterTeam.memberIds.includes(c.assignee))
+  } else if (filterAssignee != null) {
+    l = l.filter(c => c.assignee === filterAssignee)
+  }
 
   if (fil === "overdue")    l = l.filter(c => { const d = cfDLeft(c); return d !== Infinity && d < 0 && c.s !== "delivered" })
   if (fil === "upcoming")   l = l.filter(c => { const d = cfDLeft(c); return d !== Infinity && d >= 0 && d <= 14 && c.s !== "delivered" })
   if (fil === "inprogress") l = l.filter(c => c.s === "inprogress")
   if (fil === "review")     l = l.filter(c => c.s === "review")
   if (fil === "delivered")  l = l.filter(c => c.s === "delivered")
-  if (fil === "noddate")    l = l.filter(c => !parseNr(c.recordingDate) && c.s !== "delivered")
 
   l.sort((a, b) => {
     // Levererade alltid sist om ej levererat-filter

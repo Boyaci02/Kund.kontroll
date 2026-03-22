@@ -152,3 +152,126 @@ alter table marketing_plans disable row level security;
 create trigger marketing_plans_updated_at
   before update on marketing_plans
   for each row execute function update_updated_at();
+
+-- =====================
+-- LEADS (proper tabell)
+-- =====================
+create table if not exists leads (
+  id          integer     primary key,
+  name        text        not null default '',
+  status      text        default 'Ny lead' check (status in ('Ny lead','Intresserad','Offert skickad','Överenskommelse','Förlorad')),
+  email       text        default '',
+  phone       text        default '',
+  notes       text        default '',
+  created_at  timestamptz default now()
+);
+alter table leads disable row level security;
+
+-- =====================
+-- ONBOARDING
+-- =====================
+create table if not exists ob_enrollments (
+  id          integer     primary key,
+  kund_id     integer     not null references kunder(id) on delete cascade,
+  name        text        not null default '',
+  pkg         text        default '',
+  added_at    text        default '',
+  priority    text        default 'normal' check (priority in ('urgent','high','normal','low')),
+  "order"     integer     default 0
+);
+alter table ob_enrollments disable row level security;
+
+create table if not exists ob_task_state (
+  kund_id     integer     primary key references kunder(id) on delete cascade,
+  state       jsonb       not null default '{}'::jsonb,
+  updated_at  timestamptz default now()
+);
+alter table ob_task_state disable row level security;
+
+-- =====================
+-- CONTENT FLOW — DEDIKERADE TABELLER
+-- Ersätter app_state['cf-state'] och app_state['cf-team']
+-- =====================
+
+-- CF-teammedlemmar
+create table if not exists cf_members (
+  id         bigint      primary key,
+  name       text        not null default '',
+  color      text        not null default '#888888',
+  created_at timestamptz default now()
+);
+alter table cf_members disable row level security;
+
+-- Per-kund workflow-state
+create table if not exists cf_client_state (
+  kund_id    integer     primary key references kunder(id) on delete cascade,
+  s          text        not null default 'scheduled'
+               check (s in ('scheduled','inprogress','review','delivered')),
+  qc         jsonb       not null default '[]',
+  qn         text        not null default '',
+  rev        integer     not null default 0,
+  assignee   bigint      references cf_members(id) on delete set null,
+  updated_at timestamptz default now()
+);
+alter table cf_client_state disable row level security;
+
+create trigger cf_client_state_updated_at
+  before update on cf_client_state
+  for each row execute function update_updated_at();
+
+-- Kanban-kolumner per kund
+create table if not exists content_columns (
+  id         bigint      primary key,
+  kund_id    integer     not null references kunder(id) on delete cascade,
+  label      text        not null default '',
+  col_order  integer     not null default 0
+);
+alter table content_columns disable row level security;
+create index if not exists content_columns_kund_id on content_columns(kund_id);
+
+-- Kanban-kort
+create table if not exists content_cards (
+  id         bigint      primary key,
+  kund_id    integer     not null references kunder(id) on delete cascade,
+  column_id  bigint      not null references content_columns(id) on delete cascade,
+  title      text        not null default '',
+  notes      text        not null default '',
+  hook       text        not null default '',
+  status     text        not null default 'idea'
+               check (status in ('idea','planned','filming','editing','published')),
+  assignee   text        not null default '',
+  card_order integer     not null default 0,
+  created_at timestamptz default now()
+);
+alter table content_cards disable row level security;
+create index if not exists content_cards_column_id on content_cards(column_id);
+create index if not exists content_cards_kund_id   on content_cards(kund_id);
+
+-- Kortkommentarer
+create table if not exists card_comments (
+  id         bigint      primary key,
+  card_id    bigint      not null references content_cards(id) on delete cascade,
+  text       text        not null default '',
+  author     text        not null default '',
+  created_at timestamptz default now()
+);
+alter table card_comments disable row level security;
+create index if not exists card_comments_card_id on card_comments(card_id);
+
+-- Videoidé-rader (arbetsyta / ContentTable)
+create table if not exists content_rows (
+  id         bigint      primary key,
+  kund_id    integer     not null references kunder(id) on delete cascade,
+  title      text        not null default '',
+  format     text        not null default '',
+  pub_date   text        not null default '',
+  hook       text        not null default '',
+  notes      text        not null default '',
+  comments   text        not null default '',
+  status     text        not null default ''
+               check (status in ('Todo','In progress','Done','')),
+  row_order  integer     not null default 0,
+  created_at timestamptz default now()
+);
+alter table content_rows disable row level security;
+create index if not exists content_rows_kund_id on content_rows(kund_id);

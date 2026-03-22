@@ -69,14 +69,15 @@ const DEFAULT_CF_STATE: CFClientState = {
   contentBoard: { columns: [] },
   contentTable: [],
   assignee: null,
-}
-
-function makeDefaultColumns(): CFColumn[] {
-  return DEFAULT_COLUMNS.map((label, i) => ({ id: i + 1, label, cards: [] }))
+  deliveredAt: null,
 }
 
 let _nextId = Date.now()
 function newId() { return ++_nextId }
+
+function makeDefaultColumns(): CFColumn[] {
+  return DEFAULT_COLUMNS.map((label) => ({ id: newId(), label, cards: [] }))
+}
 
 // ─── Card Panel ───────────────────────────────────────────────────────────────
 

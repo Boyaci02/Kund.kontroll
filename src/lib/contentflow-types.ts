@@ -45,6 +45,7 @@ export interface CFClientState {
   contentBoard: { columns: CFColumn[] }
   contentTable: ContentRow[]  // arbetsyta med videoidéer
   assignee: number | null  // CF-teammedlem (för QC-granskning)
+  deliveredAt: string | null  // ISO-tidsstämpel när leverans godkändes
 }
 
 /** Sammanslagen vy av Kund + CFClientState — används i UI */
@@ -66,6 +67,7 @@ export interface CFClient {
   contentBoard: { columns: CFColumn[] }
   contentTable: ContentRow[]
   assignee: number | null
+  deliveredAt: string | null
 }
 
 export interface CFMember {
@@ -74,5 +76,11 @@ export interface CFMember {
   color: string
 }
 
-export type CFFilter = "all" | "overdue" | "upcoming" | "inprogress" | "review" | "delivered" | "noddate"
+export interface CFTeam {
+  id: number
+  name: string
+  memberIds: number[]
+}
+
+export type CFFilter = "all" | "overdue" | "upcoming" | "inprogress" | "review" | "delivered"
 export type CFSortCol = "name" | "status" | "due" | "recording" | "week"

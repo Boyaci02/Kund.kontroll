@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import {
   cfTodayStr, cfGetList, cfCounts,
   CF_COLORS, FILTER_LABELS, defaultCFState, getWeekSlot,
 } from "@/lib/contentflow-data"
-import type { CFClient, CFClientState, CFFilter, CFSortCol } from "@/lib/contentflow-types"
+import type { CFClient, CFClientState, CFFilter, CFSortCol, CFTeam } from "@/lib/contentflow-types"
 import { useDB } from "@/lib/store"
 import { useCf } from "@/components/providers/CfProvider"
 import KpiBand from "@/components/contentflow/KpiBand"
@@ -17,7 +17,7 @@ import QcModal from "@/components/contentflow/QcModal"
 import ContentBoardModal from "@/components/contentflow/ContentBoardModal"
 import ContentWorkspaceModal from "@/components/contentflow/ContentWorkspaceModal"
 import TeamModal from "@/components/contentflow/TeamModal"
-import { Table, LayoutGrid, Users, Download, X } from "lucide-react"
+import { Table, LayoutGrid, Users, Download, X, ChevronDown, Users2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // ── Advance confirm modal ─────────────────────────────────────────────
@@ -56,36 +56,99 @@ function AdvanceModal({ cfg, onClose }: { cfg: AdvanceConfig; onClose: () => voi
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────
+// ── Filter dropdown ───────────────────────────────────────────────────
 
-const FILTERS: { id: CFFilter; label: string }[] = [
-  { id: "all",        label: "Alla" },
+const FILTER_OPTIONS: { id: CFFilter; label: string }[] = [
+  { id: "all",        label: "Alla kunder" },
   { id: "overdue",    label: "Försenade" },
-  { id: "upcoming",   label: "Inom 14d" },
+  { id: "upcoming",   label: "Inom 14 dagar" },
   { id: "inprogress", label: "Pågår" },
   { id: "review",     label: "Granskning" },
   { id: "delivered",  label: "Levererade" },
-  { id: "noddate",    label: "Ej datum" },
 ]
+
+function FilterDropdown({ fil, counts, onChange }: {
+  fil: CFFilter
+  counts: Record<string, number>
+  onChange: (f: CFFilter) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handle)
+    return () => document.removeEventListener("mousedown", handle)
+  }, [open])
+
+  const current = FILTER_OPTIONS.find(o => o.id === fil) ?? FILTER_OPTIONS[0]
+  const isActive = fil !== "all"
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          "flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl border transition-all",
+          isActive
+            ? "bg-primary text-primary-foreground border-primary"
+            : "border-border text-muted-foreground hover:bg-muted",
+        )}
+      >
+        {current.label}
+        <ChevronDown className="w-3 h-3 opacity-70" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 top-full mt-1 left-0 w-44 bg-popover border border-border rounded-xl shadow-lg py-1 text-sm">
+          {FILTER_OPTIONS.map(opt => {
+            const count = counts[opt.id] ?? 0
+            return (
+              <button
+                key={opt.id}
+                onClick={() => { onChange(opt.id); setOpen(false) }}
+                className={cn(
+                  "w-full text-left px-3 py-2 hover:bg-muted transition-colors flex items-center justify-between",
+                  fil === opt.id && "font-semibold text-foreground",
+                )}
+              >
+                <span className="text-xs">{opt.label}</span>
+                {count > 0 && opt.id !== "all" && (
+                  <span className="text-[0.6rem] font-bold bg-muted text-foreground px-1.5 py-0.5 rounded-full">{count}</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────
 
 export default function ContentFlowPage() {
   const { db } = useDB()
-  const { cfState, updateCfClient, team, setTeam } = useCf()
+  const { cfState, updateCfClient, team, setTeam, teams, setTeams } = useCf()
 
-  const [view,    setView]    = useState<"table" | "board">("table")
-  const [fil,     setFil]     = useState<CFFilter>("all")
-  const [q,       setQ]       = useState("")
-  const [sortCol, setSortCol] = useState<CFSortCol>("due")
-  const [sortDir, setSortDir] = useState<1 | -1>(1)
+  const [view,           setView]           = useState<"table" | "board">("table")
+  const [fil,            setFil]            = useState<CFFilter>("all")
+  const [q,              setQ]              = useState("")
+  const [sortCol,        setSortCol]        = useState<CFSortCol>("due")
+  const [sortDir,        setSortDir]        = useState<1 | -1>(1)
   const [filterAssignee, setFilterAssignee] = useState<number | null>(null)
+  const [filterTeam,     setFilterTeam]     = useState<CFTeam | null>(null)
 
   // Modal states
-  const [stateModalId,  setStateModalId]   = useState<number | null>(null)
-  const [qcClient,      setQcClient]       = useState<CFClient | null>(null)
-  const [boardClient,   setBoardClient]    = useState<CFClient | null>(null)
-  const [workspaceClient, setWorkspaceClient] = useState<CFClient | null>(null)
-  const [showTeam,      setShowTeam]      = useState(false)
-  const [advanceCfg,    setAdvanceCfg]    = useState<AdvanceConfig | null>(null)
+  const [stateModalId,     setStateModalId]     = useState<number | null>(null)
+  const [qcClient,         setQcClient]         = useState<CFClient | null>(null)
+  const [boardClient,      setBoardClient]      = useState<CFClient | null>(null)
+  const [workspaceClient,  setWorkspaceClient]  = useState<CFClient | null>(null)
+  const [showTeam,         setShowTeam]         = useState(false)
+  const [advanceCfg,       setAdvanceCfg]       = useState<AdvanceConfig | null>(null)
 
   // ── Merge db.clients + cfState ─────────────────────────────────────
 
@@ -111,6 +174,22 @@ export default function ContentFlowPage() {
   const updateCFState = useCallback((id: number, patch: Partial<CFClientState>) => {
     updateCfClient(id, { ...(cfState[id] ?? defaultCFState()), ...patch })
   }, [cfState, updateCfClient])
+
+  // ── Auto-reset delivered clients after 3 days ─────────────────────
+
+  useEffect(() => {
+    if (!clients.length) return
+    for (const c of clients) {
+      if (c.s === "delivered" && c.deliveredAt) {
+        const daysSince = (Date.now() - new Date(c.deliveredAt).getTime()) / 86400000
+        if (daysSince >= 3) {
+          updateCFState(c.id, { s: "scheduled", qc: [], qn: "", deliveredAt: null })
+        }
+      }
+    }
+  // We intentionally run this only when cfState changes (not clients, to avoid loops)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfState])
 
   // ── Status changes ─────────────────────────────────────────────────
 
@@ -143,14 +222,14 @@ export default function ContentFlowPage() {
       sub: "Återställer QC och startar om cykeln.",
       btnLabel: "↺ Starta ny cykel",
       onConfirm: () => {
-        updateCFState(id, { s: "scheduled", qc: [], qn: "" })
+        updateCFState(id, { s: "scheduled", qc: [], qn: "", deliveredAt: null })
         toast(`Ny cykel — ${c.name}`)
       },
     })
   }, [clients, updateCFState])
 
   const handleQcApprove = useCallback((id: number, checks: number[], notes: string) => {
-    updateCFState(id, { qc: checks, qn: notes, s: "delivered" })
+    updateCFState(id, { qc: checks, qn: notes, s: "delivered", deliveredAt: new Date().toISOString() })
     toast.success(`✓ ${clients.find(x => x.id === id)?.name} godkänd`)
     setQcClient(null)
   }, [clients, updateCFState])
@@ -161,6 +240,12 @@ export default function ContentFlowPage() {
     toast(`${c.name} — revision begärd`)
     setQcClient(null)
   }, [clients, updateCFState])
+
+  // ── Inline assignee change ─────────────────────────────────────────
+
+  const handleAssigneeChange = useCallback((clientId: number, assigneeId: number | null) => {
+    updateCFState(clientId, { assignee: assigneeId })
+  }, [updateCFState])
 
   // ── Sort ───────────────────────────────────────────────────────────
 
@@ -181,12 +266,25 @@ export default function ContentFlowPage() {
   const removeMember = (id: number) => {
     const m = team.find(x => x.id === id)
     setTeam(team.filter(x => x.id !== id))
-    // Clear assignee from all clients that had this member
     Object.entries(cfState).forEach(([k, v]) => {
       if (v.assignee === id) updateCfClient(Number(k), { ...v, assignee: null })
     })
     toast(`${m?.name} borttagen`)
   }
+
+  // ── Assignee / team filter toggle ─────────────────────────────────
+
+  const toggleAssigneeFilter = (id: number) => {
+    setFilterTeam(null)
+    setFilterAssignee(prev => prev === id ? null : id)
+  }
+
+  const toggleTeamFilter = (t: CFTeam) => {
+    setFilterAssignee(null)
+    setFilterTeam(prev => prev?.id === t.id ? null : t)
+  }
+
+  const clearFilters = () => { setFilterAssignee(null); setFilterTeam(null) }
 
   // ── CSV export ────────────────────────────────────────────────────
 
@@ -209,7 +307,7 @@ export default function ContentFlowPage() {
   }
 
   const ct = cfCounts(clients)
-  const list = cfGetList(clients, fil, q, sortCol, sortDir, filterAssignee)
+  const list = cfGetList(clients, fil, q, sortCol, sortDir, filterAssignee, filterTeam)
   const stateModalClient = stateModalId != null ? clients.find(x => x.id === stateModalId) ?? null : null
 
   // ── Render ────────────────────────────────────────────────────────
@@ -229,34 +327,11 @@ export default function ContentFlowPage() {
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 px-6 py-4 flex-wrap">
-        {/* Filter tabs */}
-        <div className="flex gap-1 flex-wrap">
-          {FILTERS.map(f => {
-            const count = ct[f.id as keyof typeof ct] as number
-            return (
-              <button
-                key={f.id}
-                onClick={() => setFil(f.id)}
-                className={cn(
-                  "flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl transition-all",
-                  fil === f.id
-                    ? "bg-primary text-primary-foreground"
-                    : "border border-border text-muted-foreground hover:bg-muted",
-                )}
-              >
-                {f.label}
-                {count > 0 && f.id !== "all" && (
-                  <span className={cn("text-[0.6rem] font-bold px-1.5 py-0.5 rounded-full", fil === f.id ? "bg-white/20" : "bg-muted text-foreground")}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
+        {/* Anpassa filter dropdown */}
+        <FilterDropdown fil={fil} counts={ct} onChange={setFil} />
 
         {/* Search */}
-        <div className="relative ml-auto">
+        <div className="relative">
           <input
             value={q}
             onChange={e => setQ(e.target.value)}
@@ -266,26 +341,53 @@ export default function ContentFlowPage() {
           {q && <button onClick={() => setQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>}
         </div>
 
-        {/* Assignee filter */}
-        {team.length > 0 && (
-          <div className="flex items-center gap-1">
+        {/* Assignee + team filter */}
+        {(team.length > 0 || teams.length > 0) && (
+          <div className="flex items-center gap-1 flex-wrap">
+            {/* Individual members */}
             {team.map(m => (
               <button
                 key={m.id}
-                onClick={() => setFilterAssignee(filterAssignee === m.id ? null : m.id)}
+                onClick={() => toggleAssigneeFilter(m.id)}
                 title={m.name}
-                className={cn("w-7 h-7 rounded-full text-white text-xs font-bold transition-all", filterAssignee === m.id && "ring-2 ring-offset-1 ring-primary")}
+                className={cn(
+                  "w-7 h-7 rounded-full text-white text-xs font-bold transition-all",
+                  filterAssignee === m.id && "ring-2 ring-offset-1 ring-primary",
+                )}
                 style={{ background: m.color }}
               >
                 {m.name[0]}
               </button>
             ))}
-            {filterAssignee && <button onClick={() => setFilterAssignee(null)} className="text-xs text-muted-foreground hover:text-foreground ml-1"><X className="w-3 h-3" /></button>}
+
+            {/* Team groups */}
+            {teams.map(t => (
+              <button
+                key={t.id}
+                onClick={() => toggleTeamFilter(t)}
+                title={t.name}
+                className={cn(
+                  "flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border transition-all",
+                  filterTeam?.id === t.id
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border text-muted-foreground hover:bg-muted",
+                )}
+              >
+                <Users2 className="w-3 h-3" />
+                {t.name}
+              </button>
+            ))}
+
+            {(filterAssignee || filterTeam) && (
+              <button onClick={clearFilters} className="text-xs text-muted-foreground hover:text-foreground ml-1">
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
         )}
 
         {/* View toggle */}
-        <div className="flex gap-1 border border-border rounded-xl overflow-hidden">
+        <div className="flex gap-1 border border-border rounded-xl overflow-hidden ml-auto">
           <button onClick={() => setView("table")} className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 transition-colors", view === "table" ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground")}>
             <Table className="w-3 h-3" /> Tabell
           </button>
@@ -305,7 +407,9 @@ export default function ContentFlowPage() {
 
       {/* Page header */}
       <div className="px-6 mb-3">
-        <span className="text-sm font-medium text-foreground">{FILTER_LABELS[fil]}</span>
+        <span className="text-sm font-medium text-foreground">
+          {filterTeam ? `Grupp: ${filterTeam.name}` : filterAssignee ? (team.find(m => m.id === filterAssignee)?.name ?? FILTER_LABELS[fil]) : FILTER_LABELS[fil]}
+        </span>
         <span className="text-xs text-muted-foreground ml-2">{list.length} kund{list.length !== 1 ? "er" : ""}</span>
       </div>
 
@@ -314,7 +418,8 @@ export default function ContentFlowPage() {
         {view === "table" ? (
           <ClientTable
             clients={clients} team={team} fil={fil} q={q}
-            sortCol={sortCol} sortDir={sortDir} filterAssignee={filterAssignee}
+            sortCol={sortCol} sortDir={sortDir}
+            filterAssignee={filterAssignee} filterTeam={filterTeam}
             onSort={handleSort}
             onAdvance={advance}
             onNewCycle={startNewCycle}
@@ -322,6 +427,7 @@ export default function ContentFlowPage() {
             onEdit={id => setStateModalId(id)}
             onBoard={id => setBoardClient(clients.find(x => x.id === id) ?? null)}
             onWorkspace={id => setWorkspaceClient(clients.find(x => x.id === id) ?? null)}
+            onAssigneeChange={handleAssigneeChange}
           />
         ) : (
           <ClientBoard
@@ -382,8 +488,10 @@ export default function ContentFlowPage() {
       {showTeam && (
         <TeamModal
           team={team}
+          teams={teams}
           onAdd={addMember}
           onRemove={removeMember}
+          onSaveTeams={setTeams}
           onClose={() => setShowTeam(false)}
         />
       )}

@@ -1,8 +1,9 @@
 "use client"
 
+import { useState, useRef, useEffect } from "react"
 import { cfDLeft, cfGetList, contentDeadline, STATUS_LABELS, STATUS_STYLES, QC_ITEMS } from "@/lib/contentflow-data"
-import type { CFClient, CFMember, CFFilter, CFSortCol } from "@/lib/contentflow-types"
-import { ArrowUpDown, ChevronUp, ChevronDown, LayoutGrid, Grid3X3, ExternalLink, Table2 } from "lucide-react"
+import type { CFClient, CFMember, CFFilter, CFSortCol, CFTeam } from "@/lib/contentflow-types"
+import { ArrowUpDown, ChevronUp, ChevronDown, LayoutGrid, Grid3X3, ExternalLink, Table2, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 
@@ -21,6 +22,7 @@ interface Props {
   sortCol: CFSortCol
   sortDir: 1 | -1
   filterAssignee: number | null
+  filterTeam: CFTeam | null
   onSort: (col: CFSortCol) => void
   onAdvance: (id: number, to: "inprogress" | "review") => void
   onNewCycle: (id: number) => void
@@ -28,6 +30,7 @@ interface Props {
   onEdit: (id: number) => void
   onBoard: (id: number) => void
   onWorkspace: (id: number) => void
+  onAssigneeChange: (clientId: number, assigneeId: number | null) => void
 }
 
 function SortIcon({ col, sortCol, sortDir }: { col: CFSortCol; sortCol: CFSortCol; sortDir: 1 | -1 }) {
@@ -35,24 +38,78 @@ function SortIcon({ col, sortCol, sortDir }: { col: CFSortCol; sortCol: CFSortCo
   return sortDir === 1 ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
 }
 
-function MemberChip({ clientAssignee, team }: { clientAssignee: number | null; team: CFMember[] }) {
+function InlineAssignee({
+  clientId, clientAssignee, team, onChange,
+}: {
+  clientId: number
+  clientAssignee: number | null
+  team: CFMember[]
+  onChange: (clientId: number, assigneeId: number | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
   const m = team.find(x => x.id === clientAssignee)
-  if (!m) return <span className="text-xs text-muted-foreground">—</span>
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [open])
+
   return (
-    <span className="flex items-center gap-1.5">
-      <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[0.55rem] font-bold shrink-0" style={{ background: m.color }}>
-        {m.name[0]}
-      </span>
-      <span className="text-xs font-medium text-foreground">{m.name}</span>
-    </span>
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 group hover:bg-muted/60 rounded-lg px-1.5 py-0.5 transition-colors"
+      >
+        {m ? (
+          <>
+            <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[0.55rem] font-bold shrink-0" style={{ background: m.color }}>
+              {m.name[0]}
+            </span>
+            <span className="text-xs font-medium text-foreground">{m.name}</span>
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">— Ingen —</span>
+        )}
+        <Pencil className="w-2.5 h-2.5 text-muted-foreground opacity-0 group-hover:opacity-60 transition-opacity" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 left-0 top-full mt-1 w-40 bg-popover border border-border rounded-xl shadow-lg py-1 text-sm">
+          <button
+            onClick={() => { onChange(clientId, null); setOpen(false) }}
+            className="w-full text-left px-3 py-1.5 hover:bg-muted transition-colors text-muted-foreground text-xs"
+          >
+            — Ingen —
+          </button>
+          {team.map(tm => (
+            <button
+              key={tm.id}
+              onClick={() => { onChange(clientId, tm.id); setOpen(false) }}
+              className="w-full text-left px-3 py-1.5 hover:bg-muted transition-colors flex items-center gap-2"
+            >
+              <span className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[0.5rem] font-bold shrink-0" style={{ background: tm.color }}>
+                {tm.name[0]}
+              </span>
+              <span className="text-xs">{tm.name}</span>
+              {clientAssignee === tm.id && <span className="ml-auto text-primary">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
 export default function ClientTable({
-  clients, team, fil, q, sortCol, sortDir, filterAssignee,
-  onSort, onAdvance, onNewCycle, onReview, onEdit, onBoard, onWorkspace,
+  clients, team, fil, q, sortCol, sortDir, filterAssignee, filterTeam,
+  onSort, onAdvance, onNewCycle, onReview, onEdit, onBoard, onWorkspace, onAssigneeChange,
 }: Props) {
-  const list = cfGetList(clients, fil, q, sortCol, sortDir, filterAssignee)
+  const list = cfGetList(clients, fil, q, sortCol, sortDir, filterAssignee, filterTeam)
 
   const thCls = (col: CFSortCol) =>
     cn("text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide py-3 px-4 cursor-pointer hover:text-foreground transition-colors select-none",
@@ -89,7 +146,7 @@ export default function ClientTable({
               <span className="flex items-center gap-1">Vecka <SortIcon col="week" sortCol={sortCol} sortDir={sortDir} /></span>
             </th>
             <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide py-3 px-4">Team</th>
-            <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide py-3 px-4">Granskare</th>
+            <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide py-3 px-4">Ansvarig</th>
             <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide py-3 px-4">QC</th>
             <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide py-3 px-4">Åtgärder</th>
           </tr>
@@ -154,7 +211,7 @@ export default function ClientTable({
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <MemberChip clientAssignee={c.assignee} team={team} />
+                  <InlineAssignee clientId={c.id} clientAssignee={c.assignee} team={team} onChange={onAssigneeChange} />
                 </td>
                 <td className="px-4 py-3">
                   {c.s === "review" ? (

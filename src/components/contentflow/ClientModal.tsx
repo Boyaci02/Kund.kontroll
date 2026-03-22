@@ -46,7 +46,7 @@ export default function CFStateModal({ client, team, onSave, onClose }: Props) {
 
           {/* Assignee */}
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1">Granskare</label>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">Ansvarig för content</label>
             <select value={assignee ?? ""} onChange={e => setAssignee(e.target.value ? parseInt(e.target.value) : null)}
               className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
               <option value="">— Ingen —</option>
