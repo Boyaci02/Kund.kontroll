@@ -2,8 +2,9 @@
 
 import { useState, useMemo } from "react"
 import { useAuth } from "@/components/providers/AuthProvider"
+import { useDB } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import { TrendingUp, Lock, RefreshCw } from "lucide-react"
+import { TrendingUp, Lock, RefreshCw, AlertCircle } from "lucide-react"
 
 const ALLOWED = ["Emanuel", "Philip", "Jakob"]
 
@@ -91,13 +92,14 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
-type Tab = "oversikt" | "kostnader" | "tillvaxt" | "lonetrappa"
+type Tab = "dashboard" | "oversikt" | "kostnader" | "tillvaxt" | "lonetrappa"
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function EkonomiPage() {
   const { user } = useAuth()
+  const { db } = useDB()
 
-  // State: revenue inputs
+  // State: revenue inputs (used by prognos tab)
   const [someKunder, setSomeKunder] = useState(34)
   const [someSnittPris, setSomeSnittPris] = useState(10921)
   const [hemsidKunder, setHemsidKunder] = useState(10)
@@ -112,48 +114,95 @@ export default function EkonomiPage() {
   const [nyaSome, setNyaSome] = useState(4)
   const [nyaHemsidor, setNyaHemsidor] = useState(10)
 
-  const [tab, setTab] = useState<Tab>("oversikt")
+  const [tab, setTab] = useState<Tab>("dashboard")
 
-  // ── Computed values ──────────────────────────────────────────────────────────
+  // ── Real data from customers ───────────────────────────────────────────────
+  const dashData = useMemo(() => {
+    const aktiva = db.clients.filter((c) => c.st === "AKTIV")
+    const totalIntakt = aktiva.reduce((s, c) => s + (c.intakt ?? 0), 0)
+    const betalande = aktiva.filter((c) => (c.intakt ?? 0) > 0)
+    const snitt = betalande.length > 0 ? totalIntakt / betalande.length : 0
+
+    // Revenue per package
+    const paketMap: Record<string, { antal: number; intakt: number }> = {}
+    for (const c of aktiva) {
+      const p = c.pkg || "Okänt"
+      if (!paketMap[p]) paketMap[p] = { antal: 0, intakt: 0 }
+      paketMap[p].antal++
+      paketMap[p].intakt += c.intakt ?? 0
+    }
+    const paketLista = Object.entries(paketMap)
+      .map(([pkg, v]) => ({ pkg, ...v }))
+      .sort((a, b) => b.intakt - a.intakt)
+
+    // Top 10 customers
+    const top10 = [...aktiva]
+      .filter((c) => (c.intakt ?? 0) > 0)
+      .sort((a, b) => (b.intakt ?? 0) - (a.intakt ?? 0))
+      .slice(0, 10)
+
+    // Revenue per CC
+    const ccMap: Record<string, { antal: number; intakt: number }> = {}
+    for (const c of aktiva) {
+      const cc = c.cc || "Okänd"
+      if (!ccMap[cc]) ccMap[cc] = { antal: 0, intakt: 0 }
+      ccMap[cc].antal++
+      ccMap[cc].intakt += c.intakt ?? 0
+    }
+    const ccLista = Object.entries(ccMap)
+      .map(([cc, v]) => ({ cc, ...v }))
+      .sort((a, b) => b.intakt - a.intakt)
+
+    // Missing intakt
+    const saknarIntakt = aktiva.filter((c) => !(c.intakt ?? 0))
+
+    return { totalIntakt, betalande: betalande.length, snitt, paketLista, top10, ccLista, saknarIntakt, aktiva }
+  }, [db.clients])
+
+  // ── Computed cost total (shared) ──────────────────────────────────────────
+  const totalKostnad = useMemo(() => {
+    const totalPersonal = personal.reduce((s, p) => s + p.netto * 1.933, 0)
+    const totalUnderlev = Object.values(underlev).reduce((s, v) => s + v, 0)
+    const totalFasta = Object.values(fasta).reduce((s, v) => s + v, 0)
+    return totalPersonal + totalUnderlev + totalFasta
+  }, [personal, underlev, fasta])
+
+  // ── Computed values (kalkylator tab) ─────────────────────────────────────
   const computed = useMemo(() => {
     const someIntakt = someKunder * someSnittPris
     const hemsidIntakt = hemsidKunder * hemsidPris
     const totalIntakt = someIntakt + hemsidIntakt
 
-    // Personal: netto × 1.933 ≈ total inkl bruttolön + AG (31.42%)
     const totalPersonal = personal.reduce((s, p) => s + p.netto * 1.933, 0)
     const totalUnderlev = Object.values(underlev).reduce((s, v) => s + v, 0)
     const totalFasta = Object.values(fasta).reduce((s, v) => s + v, 0)
-    const totalKostnad = totalPersonal + totalUnderlev + totalFasta
+    const totalKostnadCalc = totalPersonal + totalUnderlev + totalFasta
 
-    const bruttoVinst = totalIntakt - totalKostnad
+    const bruttoVinst = totalIntakt - totalKostnadCalc
     const margin = totalIntakt > 0 ? bruttoVinst / totalIntakt : 0
-
-    // Skatter: ~37.9% av intäkt (från Excel)
     const skatter = totalIntakt * 0.379
     const verkligtKvar = bruttoVinst - skatter
     const goalProgress = Math.min(totalIntakt / 1_000_000, 1)
 
-    return { someIntakt, hemsidIntakt, totalIntakt, totalPersonal, totalUnderlev, totalFasta, totalKostnad, bruttoVinst, margin, skatter, verkligtKvar, goalProgress }
+    return { someIntakt, hemsidIntakt, totalIntakt, totalPersonal, totalUnderlev, totalFasta, totalKostnad: totalKostnadCalc, bruttoVinst, margin, skatter, verkligtKvar, goalProgress }
   }, [someKunder, someSnittPris, hemsidKunder, hemsidPris, personal, underlev, fasta])
 
-  // ── 12-month growth projection ────────────────────────────────────────────────
+  // ── 12-month growth projection (uses real total as base) ──────────────────
   const tillvaxt = useMemo(() => {
     const rows = []
-    let kunder = someKunder
-    let hemsid = hemsidKunder
+    // Use real intakt as base, grow from there
+    const baseIntakt = dashData.totalIntakt > 0 ? dashData.totalIntakt : someKunder * someSnittPris + hemsidKunder * hemsidPris
+    let currentIntakt = baseIntakt
     for (let i = 0; i < 12; i++) {
       if (i > 0) {
-        kunder = kunder + nyaSome - 1 // 1 churn/mån
-        hemsid = hemsid + nyaHemsidor
+        // Add approx revenue from new SoMe clients, add hemsida clients
+        currentIntakt = currentIntakt + nyaSome * someSnittPris - 1 * someSnittPris + nyaHemsidor * hemsidPris
       }
-      const intakt = kunder * someSnittPris + hemsid * hemsidPris
+      const intakt = currentIntakt
 
-      // Salary follows lönetrappa for E/J/P
       const ejpNetto = LONETRAPPA_EJP[i]
       const totalNetto = ejpNetto * 3 + 9000 * 2
       const totalPersonal = totalNetto * 1.933
-
       const totalUnderlev = Object.values(underlev).reduce((s, v) => s + v, 0)
       const totalFasta = Object.values(fasta).reduce((s, v) => s + v, 0)
       const kostnad = totalPersonal + totalUnderlev + totalFasta
@@ -162,10 +211,10 @@ export default function EkonomiPage() {
       const skatter = intakt * 0.379
       const kvar = vinst - skatter
 
-      rows.push({ month: MONTHS_12[i], kunder, hemsid, intakt, kostnad, vinst, margin: intakt > 0 ? vinst / intakt : 0, kvar })
+      rows.push({ month: MONTHS_12[i], intakt, kostnad, vinst, margin: intakt > 0 ? vinst / intakt : 0, kvar })
     }
     return rows
-  }, [someKunder, someSnittPris, hemsidKunder, hemsidPris, nyaSome, nyaHemsidor, underlev, fasta])
+  }, [dashData.totalIntakt, someKunder, someSnittPris, hemsidKunder, hemsidPris, nyaSome, nyaHemsidor, underlev, fasta])
 
   // ── Role guard ────────────────────────────────────────────────────────────────
   if (!user || !ALLOWED.includes(user.name)) {
@@ -194,6 +243,11 @@ export default function EkonomiPage() {
     setNyaHemsidor(10)
   }
 
+  const dashNettomargin = dashData.totalIntakt > 0
+    ? (dashData.totalIntakt - totalKostnad) / dashData.totalIntakt
+    : 0
+  const dashMaxIntakt = dashData.paketLista[0]?.intakt || 1
+
   // ── Render ─────────────────────────────────────────────────────────────────────
   return (
     <div className="p-8 space-y-6">
@@ -205,7 +259,7 @@ export default function EkonomiPage() {
           </div>
           <div>
             <h1 className="text-lg font-bold text-foreground">Ekonomi</h1>
-            <p className="text-xs text-muted-foreground">Interaktiv kalkylator · Syns Nu Media 2026</p>
+            <p className="text-xs text-muted-foreground">Live-dashboard · Syns Nu Media 2026</p>
           </div>
         </div>
         <button
@@ -217,47 +271,22 @@ export default function EkonomiPage() {
         </button>
       </div>
 
-      {/* KPI cards — always visible */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Total månadsintäkt" value={kr(computed.totalIntakt)} sub={`${someKunder} SoMe + ${hemsidKunder} hemsidor`} />
-        <KpiCard label="Totala kostnader" value={kr(computed.totalKostnad)} sub={`${pct(computed.totalKostnad / computed.totalIntakt)} av intäkt`} />
-        <KpiCard label="Bruttovinst" value={kr(computed.bruttoVinst)} sub={`Marginal ${pct(computed.margin)}`} highlight={computed.bruttoVinst > 0} />
-        <KpiCard label="Verkligt kvar" value={kr(computed.verkligtKvar)} sub={`Efter skatter (${pct(0.379)} avsättning)`} highlight />
-      </div>
-
-      {/* Progress to 1M */}
-      <div className="rounded-2xl border border-border bg-card p-5">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-semibold text-foreground">Mål: 1 000 000 kr/mån</p>
-          <span className="text-sm font-bold text-primary">{pct(computed.goalProgress)}</span>
-        </div>
-        <div className="h-3 bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary rounded-full transition-all duration-300"
-            style={{ width: `${computed.goalProgress * 100}%` }}
-          />
-        </div>
-        <div className="flex justify-between mt-1.5">
-          <span className="text-[10px] text-muted-foreground">{kr(computed.totalIntakt)}</span>
-          <span className="text-[10px] text-muted-foreground">Gap: {kr(Math.max(0, 1_000_000 - computed.totalIntakt))}</span>
-        </div>
-      </div>
-
       {/* Tabs */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         {/* Tab bar */}
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border overflow-x-auto">
           {([
-            ["oversikt", "Intäktsantaganden"],
+            ["dashboard", "Dashboard"],
+            ["oversikt", "Kalkylator"],
             ["kostnader", "Kostnader"],
-            ["tillvaxt", "12-månadersprognos"],
+            ["tillvaxt", "12-mån prognos"],
             ["lonetrappa", "Lönetrappa"],
           ] as [Tab, string][]).map(([t, label]) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={cn(
-                "flex-1 py-3 text-xs font-semibold transition-colors border-b-2",
+                "shrink-0 px-4 py-3 text-xs font-semibold transition-colors border-b-2 whitespace-nowrap",
                 tab === t
                   ? "border-primary text-primary bg-primary/5"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
@@ -268,7 +297,155 @@ export default function EkonomiPage() {
           ))}
         </div>
 
-        {/* Tab: Översikt / Intäktsantaganden */}
+        {/* Tab: Dashboard */}
+        {tab === "dashboard" && (
+          <div className="p-5 space-y-6">
+            {/* KPI band */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <KpiCard
+                label="Total månadsinkomst"
+                value={kr(dashData.totalIntakt)}
+                sub={`${dashData.aktiva.length} aktiva kunder`}
+                highlight
+              />
+              <KpiCard
+                label="Betalande kunder"
+                value={String(dashData.betalande)}
+                sub={`av ${dashData.aktiva.length} aktiva`}
+              />
+              <KpiCard
+                label="Snittintäkt / kund"
+                value={dashData.betalande > 0 ? kr(dashData.snitt) : "—"}
+                sub="bland kunder med intäkt"
+              />
+              <KpiCard
+                label="Nettomarginal"
+                value={dashData.totalIntakt > 0 ? pct(dashNettomargin) : "—"}
+                sub={`Kostnadsbas: ${kr(totalKostnad)}`}
+                highlight={dashNettomargin > 0}
+              />
+            </div>
+
+            {/* Mål: 1M */}
+            <div className="rounded-2xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-foreground">Mål: 1 000 000 kr/mån</p>
+                <span className="text-sm font-bold text-primary">{pct(Math.min(dashData.totalIntakt / 1_000_000, 1))}</span>
+              </div>
+              <div className="h-3 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(dashData.totalIntakt / 1_000_000, 1) * 100}%` }}
+                />
+              </div>
+              <div className="flex justify-between mt-1.5">
+                <span className="text-[10px] text-muted-foreground">{kr(dashData.totalIntakt)}</span>
+                <span className="text-[10px] text-muted-foreground">Gap: {kr(Math.max(0, 1_000_000 - dashData.totalIntakt))}</span>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Intäkt per paket */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Intäkt per paket</p>
+                <div className="space-y-2.5">
+                  {dashData.paketLista.map(({ pkg, antal, intakt }) => (
+                    <div key={pkg}>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="font-medium text-foreground truncate max-w-[140px]">{pkg}</span>
+                        <span className="text-muted-foreground ml-2 shrink-0">{antal} kund{antal !== 1 ? "er" : ""} · {kr(intakt)}</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary/70 rounded-full"
+                          style={{ width: `${(intakt / dashMaxIntakt) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {dashData.paketLista.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Ingen data</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Intäkt per content creator */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Intäkt per content creator</p>
+                <div className="space-y-2">
+                  {dashData.ccLista.map(({ cc, antal, intakt }) => (
+                    <div key={cc} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
+                      <span className="font-medium text-foreground">{cc || "—"}</span>
+                      <div className="text-right">
+                        <span className="text-foreground font-semibold">{kr(intakt)}</span>
+                        <span className="text-muted-foreground ml-2">({antal} kund{antal !== 1 ? "er" : ""})</span>
+                      </div>
+                    </div>
+                  ))}
+                  {dashData.ccLista.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Ingen data</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Topp 10 kunder */}
+            {dashData.top10.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Topp {dashData.top10.length} kunder efter intäkt</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 px-2 text-muted-foreground font-semibold">#</th>
+                        <th className="text-left py-2 px-2 text-muted-foreground font-semibold">Kund</th>
+                        <th className="text-left py-2 px-2 text-muted-foreground font-semibold">Paket</th>
+                        <th className="text-left py-2 px-2 text-muted-foreground font-semibold">CC</th>
+                        <th className="text-right py-2 px-2 text-muted-foreground font-semibold">Intäkt/mån</th>
+                        <th className="text-right py-2 px-2 text-muted-foreground font-semibold">Andel</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dashData.top10.map((c, i) => (
+                        <tr key={c.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                          <td className="py-2 px-2 text-muted-foreground">{i + 1}</td>
+                          <td className="py-2 px-2 font-medium text-foreground">{c.name}</td>
+                          <td className="py-2 px-2 text-muted-foreground">{c.pkg || "—"}</td>
+                          <td className="py-2 px-2 text-muted-foreground">{c.cc || "—"}</td>
+                          <td className="py-2 px-2 text-right font-semibold text-foreground">{kr(c.intakt ?? 0)}</td>
+                          <td className="py-2 px-2 text-right text-muted-foreground">
+                            {dashData.totalIntakt > 0 ? pct((c.intakt ?? 0) / dashData.totalIntakt) : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Kunder utan intäkt */}
+            {dashData.saknarIntakt.length > 0 && (
+              <div className="rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-900/10 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
+                    {dashData.saknarIntakt.length} aktiva kunder saknar intäkt
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {dashData.saknarIntakt.map((c) => (
+                    <span key={c.id} className="text-xs bg-amber-100 dark:bg-amber-800/30 text-amber-700 dark:text-amber-300 rounded-lg px-2 py-0.5">
+                      {c.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab: Översikt / Kalkylator */}
         {tab === "oversikt" && (
           <div className="p-5">
             <div className="grid md:grid-cols-2 gap-6">
@@ -432,9 +609,14 @@ export default function EkonomiPage() {
           </div>
         )}
 
-        {/* Tab: Tillväxt */}
+        {/* Tab: 12-mån prognos */}
         {tab === "tillvaxt" && (
           <div className="p-5">
+            {dashData.totalIntakt > 0 && (
+              <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-xs text-primary mb-4">
+                Startar från verklig intäkt: <strong>{kr(dashData.totalIntakt)}/mån</strong>
+              </div>
+            )}
             {/* Inputs */}
             <div className="flex flex-wrap gap-4 mb-5">
               <div className="flex items-center gap-2">
@@ -445,6 +627,14 @@ export default function EkonomiPage() {
                 <label className="text-sm text-foreground whitespace-nowrap">Nya hemsidkunder/mån</label>
                 <NumInput value={nyaHemsidor} onChange={setNyaHemsidor} className="w-16" />
               </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-foreground whitespace-nowrap">SoMe-snittintäkt (kr)</label>
+                <NumInput value={someSnittPris} onChange={setSomeSnittPris} step={100} className="w-24" />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-foreground whitespace-nowrap">Hemsida-pris (kr)</label>
+                <NumInput value={hemsidPris} onChange={setHemsidPris} step={50} className="w-20" />
+              </div>
             </div>
 
             {/* Table */}
@@ -452,20 +642,18 @@ export default function EkonomiPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border">
-                    {["Månad", "SoMe-kunder", "Hemsidkunder", "Intäkt", "Kostnader", "Bruttovinst", "Marginal", "Verkligt kvar"].map((h) => (
+                    {["Månad", "Intäkt", "Kostnader", "Bruttovinst", "Marginal", "Verkligt kvar"].map((h) => (
                       <th key={h} className="text-left py-2 px-2 text-muted-foreground font-semibold whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {tillvaxt.map((row, i) => (
+                  {tillvaxt.map((row) => (
                     <tr
                       key={row.month}
                       className={cn("border-b border-border/50 hover:bg-muted/20 transition-colors", row.intakt >= 1_000_000 && "bg-green-50/60 dark:bg-green-900/10")}
                     >
                       <td className="py-2 px-2 font-semibold text-foreground">{row.month}</td>
-                      <td className="py-2 px-2 text-foreground">{row.kunder}</td>
-                      <td className="py-2 px-2 text-foreground">{row.hemsid}</td>
                       <td className="py-2 px-2 font-medium text-foreground">
                         {row.intakt >= 1_000_000 ? <span className="text-green-600 dark:text-green-400 font-bold">✅ {kr(row.intakt)}</span> : kr(row.intakt)}
                       </td>
@@ -533,9 +721,9 @@ export default function EkonomiPage() {
                     {MONTHS_12.map((_, i) => {
                       const ejpNetto = LONETRAPPA_EJP[i]
                       const totalNetto = ejpNetto * 3 + 9000 * 2
-                      const totalKostnad = totalNetto * 1.933
+                      const totalKostnadRow = totalNetto * 1.933
                       return (
-                        <td key={i} className="py-2 px-2 text-right font-semibold text-muted-foreground text-[10px]">{kr(totalKostnad)}</td>
+                        <td key={i} className="py-2 px-2 text-right font-semibold text-muted-foreground text-[10px]">{kr(totalKostnadRow)}</td>
                       )
                     })}
                   </tr>

@@ -46,6 +46,7 @@ export interface Kund {
   notes: string
   gmbLocationId?: string // Google Business Profile location ID, e.g. "locations/123456789"
   tema?: KundTema
+  intakt?: number // Månadsintäkt i kr (synlig bara för ALLOWED)
 }
 
 export type GmbReviewStatus = "new" | "replied" | "flagged" | "forwarded"

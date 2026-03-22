@@ -1076,6 +1076,17 @@ export default function KundkortPage() {
                 </SelectContent>
               </Select>
             </FormField>
+            {["Emanuel", "Philip", "Jakob"].includes(user?.name ?? "") && (
+              <FormField label="Månadsintäkt (kr)">
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.intakt ?? ""}
+                  onChange={(e) => setForm({ ...form, intakt: e.target.value === "" ? 0 : Number(e.target.value) })}
+                  placeholder="0"
+                />
+              </FormField>
+            )}
             <FormField label="Videograf">
               <Select value={form.vg || NONE} onValueChange={(v) => setForm({ ...form, vg: v === NONE ? "" : v })}>
                 <SelectTrigger><SelectValue placeholder="Välj" /></SelectTrigger>

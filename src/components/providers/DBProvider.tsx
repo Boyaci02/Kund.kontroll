@@ -14,6 +14,7 @@ function kundToRow(k: Kund) {
     cc: k.cc ?? "", lr: k.lr ?? "", nr: k.nr ?? "", ns: k.ns ?? "",
     adr: k.adr ?? "", cnt: k.cnt ?? "", ph: k.ph ?? "", em: k.em ?? "",
     st: k.st ?? "", notes: k.notes ?? "", tema: k.tema ?? null,
+    intakt: k.intakt ?? 0,
   }
 }
 
@@ -28,6 +29,7 @@ function rowToKund(row: Record<string, unknown>): Kund {
     em: (row.em as string) ?? "", st: (row.st as Kund["st"]) ?? "",
     notes: (row.notes as string) ?? "",
     tema: row.tema ? (row.tema as Kund["tema"]) : undefined,
+    intakt: (row.intakt as number) ?? 0,
   }
 }
 
