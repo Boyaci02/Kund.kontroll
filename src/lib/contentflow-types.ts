@@ -36,7 +36,7 @@ export interface CFColumn {
   cards: CFCard[]
 }
 
-/** CF-specifik state per kund — sparas i cf3-state localStorage */
+/** CF-specifik state per kund */
 export interface CFClientState {
   s: CFStatus
   qc: number[]       // indices av checkade QC-punkter
@@ -44,7 +44,7 @@ export interface CFClientState {
   rev: number        // revisionsantal
   contentBoard: { columns: CFColumn[] }
   contentTable: ContentRow[]  // arbetsyta med videoidéer
-  assignee: number | null  // CF-teammedlem (för QC-granskning)
+  assignee: string | null     // namn på ansvarig (från TEAM_FARGER/TEAM_MEDLEMMAR)
   deliveredAt: string | null  // ISO-tidsstämpel när leverans godkändes
 }
 
@@ -66,20 +66,14 @@ export interface CFClient {
   rev: number
   contentBoard: { columns: CFColumn[] }
   contentTable: ContentRow[]
-  assignee: number | null
+  assignee: string | null
   deliveredAt: string | null
-}
-
-export interface CFMember {
-  id: number
-  name: string
-  color: string
 }
 
 export interface CFTeam {
   id: number
   name: string
-  memberIds: number[]
+  memberNames: string[]  // namn på teammedlemmar (från TEAM_FARGER/TEAM_MEDLEMMAR)
 }
 
 export type CFFilter = "all" | "overdue" | "upcoming" | "inprogress" | "review" | "delivered"

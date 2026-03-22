@@ -1,7 +1,8 @@
 "use client"
 
 import { cfDLeft, cfGetList, STATUS_LABELS } from "@/lib/contentflow-data"
-import type { CFClient, CFMember, CFFilter, CFSortCol } from "@/lib/contentflow-types"
+import type { CFClient, CFFilter, CFSortCol } from "@/lib/contentflow-types"
+import { TEAM_FARGER } from "@/lib/types"
 import { LayoutGrid, Table2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -22,12 +23,11 @@ const COL_COLORS: Record<string, string> = {
 
 interface Props {
   clients: CFClient[]
-  team: CFMember[]
   fil: CFFilter
   q: string
   sortCol: CFSortCol
   sortDir: 1 | -1
-  filterAssignee: number | null
+  filterAssignee: string | null
   onAdvance: (id: number, to: "inprogress" | "review") => void
   onNewCycle: (id: number) => void
   onReview: (id: number) => void
@@ -37,7 +37,7 @@ interface Props {
 }
 
 export default function ClientBoard({
-  clients, team, fil, q, sortCol, sortDir, filterAssignee,
+  clients, fil, q, sortCol, sortDir, filterAssignee,
   onAdvance, onNewCycle, onReview, onEdit, onBoard, onWorkspace,
 }: Props) {
   const list = cfGetList(clients, fil, q, sortCol, sortDir, filterAssignee)
@@ -61,7 +61,7 @@ export default function ClientBoard({
                 const dl = cfDLeft(c)
                 const done = c.s === "delivered"
                 const isOverdue = !done && dl !== Infinity && dl < 0
-                const m = team.find(x => x.id === c.assignee)
+                const assigneeColor = c.assignee ? (TEAM_FARGER[c.assignee] ?? "#888") : null
                 return (
                   <div
                     key={c.id}
@@ -70,7 +70,6 @@ export default function ClientBoard({
                   >
                     <div className="font-semibold text-sm text-foreground mb-0.5">{c.name}</div>
                     {c.tag && <div className="text-xs text-muted-foreground mb-1">{c.tag}</div>}
-                    {/* Week slot + recording date */}
                     <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                       {c.weekSlot && (
                         <span className={cn("text-[0.6rem] font-semibold px-1.5 py-0.5 rounded-full", WEEK_COLORS[c.weekSlot] ?? "bg-muted text-muted-foreground")}>
@@ -81,7 +80,6 @@ export default function ClientBoard({
                         <span className="text-[0.65rem] text-muted-foreground">{c.recordingDate}</span>
                       )}
                     </div>
-                    {/* Deadline status */}
                     {!done && dl !== Infinity && (
                       <div className={cn("text-xs mb-2", isOverdue ? "text-red-500" : dl <= 14 ? "text-amber-500" : "text-muted-foreground")}>
                         {isOverdue ? `${Math.abs(dl)}d försenat` : `${dl}d kvar`}
@@ -95,9 +93,9 @@ export default function ClientBoard({
                             {name![0]}
                           </span>
                         ))}
-                        {m && (
-                          <span className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[0.5rem] font-bold" style={{ background: m.color }} title={m.name}>
-                            {m.name[0]}
+                        {c.assignee && assigneeColor && (
+                          <span className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[0.5rem] font-bold" style={{ background: assigneeColor }} title={c.assignee}>
+                            {c.assignee[0]}
                           </span>
                         )}
                       </div>

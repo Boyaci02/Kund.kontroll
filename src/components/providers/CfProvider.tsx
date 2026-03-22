@@ -2,15 +2,15 @@
 
 import { createContext, useContext, useCallback, useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
-import type { CFClientState, CFCard, CFColumn, CFMember, CFTeam, CFStatus, ContentRow } from "@/lib/contentflow-types"
+import type { CFClientState, CFCard, CFColumn, CFTeam, CFStatus, ContentRow } from "@/lib/contentflow-types"
 
 // ── Types för DB-rader ────────────────────────────────────────────────
 
 type DbCfClientState = {
   kund_id: number; s: string; qc: number[]; qn: string; rev: number
-  assignee: number | null; delivered_at: string | null; updated_at: string
+  assignee: string | null; delivered_at: string | null; updated_at: string
 }
-type DbTeam = { id: number; name: string; member_ids: number[] }
+type DbTeam = { id: number; name: string; member_ids: string[] }
 type DbColumn = { id: number; kund_id: number; label: string; col_order: number }
 type DbCard = {
   id: number; kund_id: number; column_id: number; title: string; notes: string
@@ -21,7 +21,6 @@ type DbRow = {
   id: number; kund_id: number; title: string; format: string; pub_date: string
   hook: string; notes: string; comments: string; status: string; row_order: number
 }
-type DbMember = { id: number; name: string; color: string }
 
 type CfStateMap = Record<number, CFClientState>
 
@@ -29,9 +28,6 @@ interface CfContextValue {
   cfState: CfStateMap
   cfLoading: boolean
   updateCfClient: (clientId: number, state: CFClientState) => void
-  team: CFMember[]
-  teamLoading: boolean
-  setTeam: (team: CFMember[]) => void
   teams: CFTeam[]
   setTeams: (teams: CFTeam[]) => void
 }
@@ -45,7 +41,6 @@ export function useCf() {
 }
 
 // ── ID-generering ─────────────────────────────────────────────────────
-// Använder Date.now() (13 siffror) som ryms i bigint-kolumner och JS number
 function newId(): number {
   return Date.now() * 1000 + Math.floor(Math.random() * 1000)
 }
@@ -108,7 +103,7 @@ function assembleState(
       qc: cs.qc ?? [],
       qn: cs.qn ?? "",
       rev: cs.rev ?? 0,
-      assignee: cs.assignee,
+      assignee: cs.assignee ?? null,
       deliveredAt: cs.delivered_at ?? null,
       contentBoard: { columns: cfColumns },
       contentTable,
@@ -243,31 +238,24 @@ async function saveCfClientState(
 }
 
 // ── Remap kollisionsbenägna "små" IDs vid migrering ──────────────────
-// Standardkolumner skapas med id=1-5, delade av alla kunder → PK-konflikt.
-// Använd kund-specifika IDs: kundId * 10000 + gammal_id
 function remapSmallIds(kundId: number, state: CFClientState): CFClientState {
   const threshold = 1_000_000
   const cols = state.contentBoard?.columns ?? []
 
-  if (!cols.some(c => c.id < threshold)) return state  // Inga små IDs, ingenting att göra
+  if (!cols.some(c => c.id < threshold)) return state
 
-  const colIdMap = new Map<number, number>()
-  const newCols: CFColumn[] = cols.map((col, i) => {
-    const newColId = col.id < threshold ? kundId * 10000 + i + 1 : col.id
-    colIdMap.set(col.id, newColId)
-    return {
-      ...col,
-      id: newColId,
-      cards: col.cards.map(card => ({
-        ...card,
-        id: card.id < threshold ? kundId * 100000 + card.id : card.id,
-        comments: (card.comments ?? []).map(cm => ({
-          ...cm,
-          id: cm.id < threshold ? kundId * 1000000 + cm.id : cm.id,
-        })),
+  const newCols: CFColumn[] = cols.map((col, i) => ({
+    ...col,
+    id: col.id < threshold ? kundId * 10000 + i + 1 : col.id,
+    cards: col.cards.map(card => ({
+      ...card,
+      id: card.id < threshold ? kundId * 100000 + card.id : card.id,
+      comments: (card.comments ?? []).map(cm => ({
+        ...cm,
+        id: cm.id < threshold ? kundId * 1000000 + cm.id : cm.id,
       })),
-    }
-  })
+    })),
+  }))
 
   const newRows = (state.contentTable ?? []).map(row => ({
     ...row,
@@ -280,10 +268,8 @@ function remapSmallIds(kundId: number, state: CFClientState): CFClientState {
 // ── Provider ──────────────────────────────────────────────────────────
 export function CfProvider({ children }: { children: React.ReactNode }) {
   const [cfState, setCfState] = useState<CfStateMap>({})
-  const [team, setTeamState] = useState<CFMember[]>([])
   const [teams, setTeamsState] = useState<CFTeam[]>([])
   const [cfLoading, setCfLoading] = useState(true)
-  const [teamLoading, setTeamLoading] = useState(true)
   const cfStateRef = useRef<CfStateMap>({})
 
   // Hämta alla tabeller och sätt ihop state
@@ -310,53 +296,29 @@ export function CfProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     async function init() {
-      // Hämta team och content parallellt
-      const [membersRes, teamsRes, assembled] = await Promise.all([
-        supabase.from("cf_members").select("*").order("id"),
+      const [teamsRes, assembled] = await Promise.all([
         supabase.from("cf_teams").select("*").order("id"),
         reloadAll(),
       ])
 
-      // Team members
-      const members = (membersRes.data ?? []) as DbMember[]
-      setTeamState(members.map(m => ({ id: m.id, name: m.name, color: m.color })))
-      setTeamLoading(false)
-
-      // Teams (grupper)
+      // Teams (grupper med namn på anställda)
       const dbTeams = (teamsRes.data ?? []) as DbTeam[]
-      setTeamsState(dbTeams.map(t => ({ id: t.id, name: t.name, memberIds: t.member_ids ?? [] })))
+      setTeamsState(dbTeams.map(t => ({ id: t.id, name: t.name, memberNames: t.member_ids ?? [] })))
 
       // ── Automatisk migrering från gamla app_state JSON-blobs ─────────
-      // Körs bara om de nya tabellerna är tomma
       const isEmpty = Object.keys(assembled).length === 0
-
       if (isEmpty) {
-        const [oldCfRes, oldTeamRes] = await Promise.all([
-          supabase.from("app_state").select("data").eq("id", "cf-state").single(),
-          supabase.from("app_state").select("data").eq("id", "cf-team").single(),
-        ])
-
-        if (oldCfRes.data?.data && typeof oldCfRes.data.data === "object") {
+        const { data: oldCfData } = await supabase.from("app_state").select("data").eq("id", "cf-state").single()
+        if (oldCfData?.data && typeof oldCfData.data === "object") {
           console.log("[cf-migration] Migrerar cf-state till dedikerade tabeller...")
-          const stateMap = oldCfRes.data.data as Record<string, CFClientState>
+          const stateMap = oldCfData.data as Record<string, CFClientState>
           for (const [kundIdStr, state] of Object.entries(stateMap)) {
             const kundId = Number(kundIdStr)
-            // Remap eventuella kollisionsbenägna "små" kolumn- och kort-IDs
-            // (t.ex. standardkolumner med id=1-5 som delas mellan kunder)
             const remappedState = remapSmallIds(kundId, state)
             await saveCfClientState(kundId, remappedState, undefined)
           }
           await reloadAll()
           console.log("[cf-migration] Klar!")
-        }
-
-        if (oldTeamRes.data?.data && Array.isArray(oldTeamRes.data.data) && members.length === 0) {
-          const oldMembers = oldTeamRes.data.data as CFMember[]
-          if (oldMembers.length > 0) {
-            await supabase.from("cf_members").upsert(oldMembers)
-            setTeamState(oldMembers)
-            console.log("[cf-migration] cf-team migrerat till cf_members")
-          }
         }
       }
 
@@ -389,16 +351,10 @@ export function CfProvider({ children }: { children: React.ReactNode }) {
       supabase.channel("content_rows_ch")
         .on("postgres_changes", { event: "*", schema: "public", table: "content_rows" }, reload)
         .subscribe(),
-      supabase.channel("cf_members_ch")
-        .on("postgres_changes", { event: "*", schema: "public", table: "cf_members" }, async () => {
-          const { data } = await supabase.from("cf_members").select("*").order("id")
-          if (data) setTeamState((data as DbMember[]).map(m => ({ id: m.id, name: m.name, color: m.color })))
-        })
-        .subscribe(),
       supabase.channel("cf_teams_ch")
         .on("postgres_changes", { event: "*", schema: "public", table: "cf_teams" }, async () => {
           const { data } = await supabase.from("cf_teams").select("*").order("id")
-          if (data) setTeamsState((data as DbTeam[]).map(t => ({ id: t.id, name: t.name, memberIds: t.member_ids ?? [] })))
+          if (data) setTeamsState((data as DbTeam[]).map(t => ({ id: t.id, name: t.name, memberNames: t.member_ids ?? [] })))
         })
         .subscribe(),
     ]
@@ -430,32 +386,17 @@ export function CfProvider({ children }: { children: React.ReactNode }) {
     }
     if (newTeams.length > 0) {
       await supabase.from("cf_teams").upsert(
-        newTeams.map(t => ({ id: t.id, name: t.name, member_ids: t.memberIds }))
+        newTeams.map(t => ({ id: t.id, name: t.name, member_ids: t.memberNames }))
       )
     }
   }, [])
 
-  const setTeam = useCallback(async (members: CFMember[]) => {
-    setTeamState(members)
-    // Full ersättning: ta bort alla, sätt in nya
-    // (liten lista, aldrig mer än ~10 medlemmar)
-    const { data: existing } = await supabase.from("cf_members").select("id")
-    const existingIds = (existing ?? []).map((r: { id: number }) => r.id)
-    const newIds = new Set(members.map(m => m.id))
-    const toDelete = existingIds.filter((id: number) => !newIds.has(id))
-
-    if (toDelete.length > 0) {
-      await supabase.from("cf_members").delete().in("id", toDelete)
-    }
-    if (members.length > 0) {
-      await supabase.from("cf_members").upsert(members)
-    }
-  }, [])
-
   return (
-    <CfContext.Provider value={{ cfState, cfLoading, updateCfClient, team, teamLoading, setTeam, teams, setTeams }}>
+    <CfContext.Provider value={{ cfState, cfLoading, updateCfClient, teams, setTeams }}>
       {children}
     </CfContext.Provider>
   )
 }
 
+// Export newId for use in other modules
+export { newId }

@@ -1,19 +1,21 @@
 "use client"
 
 import { useState } from "react"
-import type { CFClient, CFClientState, CFMember, CFStatus } from "@/lib/contentflow-types"
+import type { CFClient, CFClientState, CFStatus } from "@/lib/contentflow-types"
+import { TEAM_FARGER, TEAM_MEDLEMMAR } from "@/lib/types"
 import { X } from "lucide-react"
+
+const ASSIGNEE_OPTIONS = TEAM_MEDLEMMAR.filter(m => m !== "Ingen" && m !== "")
 
 interface Props {
   client: CFClient
-  team: CFMember[]
   onSave: (patch: Partial<CFClientState>) => void
   onClose: () => void
 }
 
-export default function CFStateModal({ client, team, onSave, onClose }: Props) {
+export default function CFStateModal({ client, onSave, onClose }: Props) {
   const [s, setS] = useState<CFStatus>(client.s)
-  const [assignee, setAssignee] = useState<number | null>(client.assignee)
+  const [assignee, setAssignee] = useState<string | null>(client.assignee)
   const [qn, setQn] = useState(client.qn ?? "")
 
   return (
@@ -47,11 +49,19 @@ export default function CFStateModal({ client, team, onSave, onClose }: Props) {
           {/* Assignee */}
           <div>
             <label className="block text-xs font-semibold text-muted-foreground mb-1">Ansvarig för content</label>
-            <select value={assignee ?? ""} onChange={e => setAssignee(e.target.value ? parseInt(e.target.value) : null)}
+            <select value={assignee ?? ""} onChange={e => setAssignee(e.target.value || null)}
               className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
               <option value="">— Ingen —</option>
-              {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              {ASSIGNEE_OPTIONS.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
             </select>
+            {assignee && TEAM_FARGER[assignee] && (
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <span className="w-4 h-4 rounded-full" style={{ background: TEAM_FARGER[assignee] }} />
+                <span className="text-xs text-muted-foreground">{assignee}</span>
+              </div>
+            )}
           </div>
 
           {/* Notes */}

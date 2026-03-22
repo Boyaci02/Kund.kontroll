@@ -150,7 +150,7 @@ export function cfGetList(
   q: string,
   sortCol: CFSortCol,
   sortDir: 1 | -1,
-  filterAssignee: number | null,
+  filterAssignee: string | null,
   filterTeam: CFTeam | null = null,
 ): CFClient[] {
   let l = [...clients]
@@ -163,7 +163,7 @@ export function cfGetList(
     )
   }
   if (filterTeam != null) {
-    l = l.filter(c => c.assignee != null && filterTeam.memberIds.includes(c.assignee))
+    l = l.filter(c => c.assignee != null && filterTeam.memberNames.includes(c.assignee))
   } else if (filterAssignee != null) {
     l = l.filter(c => c.assignee === filterAssignee)
   }

@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react"
 import { cfDLeft, cfGetList, contentDeadline, STATUS_LABELS, STATUS_STYLES, QC_ITEMS } from "@/lib/contentflow-data"
-import type { CFClient, CFMember, CFFilter, CFSortCol, CFTeam } from "@/lib/contentflow-types"
+import type { CFClient, CFFilter, CFSortCol, CFTeam } from "@/lib/contentflow-types"
+import { TEAM_FARGER, TEAM_MEDLEMMAR } from "@/lib/types"
 import { ArrowUpDown, ChevronUp, ChevronDown, LayoutGrid, Grid3X3, ExternalLink, Table2, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -14,14 +15,16 @@ const WEEK_COLORS: Record<string, string> = {
   v4: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
 }
 
+// Bara visa faktiska anställda (exkludera "Ingen" och "")
+const ASSIGNEE_OPTIONS = TEAM_MEDLEMMAR.filter(m => m !== "Ingen" && m !== "")
+
 interface Props {
   clients: CFClient[]
-  team: CFMember[]
   fil: CFFilter
   q: string
   sortCol: CFSortCol
   sortDir: 1 | -1
-  filterAssignee: number | null
+  filterAssignee: string | null
   filterTeam: CFTeam | null
   onSort: (col: CFSortCol) => void
   onAdvance: (id: number, to: "inprogress" | "review") => void
@@ -30,7 +33,7 @@ interface Props {
   onEdit: (id: number) => void
   onBoard: (id: number) => void
   onWorkspace: (id: number) => void
-  onAssigneeChange: (clientId: number, assigneeId: number | null) => void
+  onAssigneeChange: (clientId: number, assignee: string | null) => void
 }
 
 function SortIcon({ col, sortCol, sortDir }: { col: CFSortCol; sortCol: CFSortCol; sortDir: 1 | -1 }) {
@@ -39,16 +42,15 @@ function SortIcon({ col, sortCol, sortDir }: { col: CFSortCol; sortCol: CFSortCo
 }
 
 function InlineAssignee({
-  clientId, clientAssignee, team, onChange,
+  clientId, assignee, onChange,
 }: {
   clientId: number
-  clientAssignee: number | null
-  team: CFMember[]
-  onChange: (clientId: number, assigneeId: number | null) => void
+  assignee: string | null
+  onChange: (clientId: number, assignee: string | null) => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const m = team.find(x => x.id === clientAssignee)
+  const color = assignee ? (TEAM_FARGER[assignee] ?? "#888") : null
 
   useEffect(() => {
     if (!open) return
@@ -65,12 +67,12 @@ function InlineAssignee({
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-1.5 group hover:bg-muted/60 rounded-lg px-1.5 py-0.5 transition-colors"
       >
-        {m ? (
+        {assignee && color ? (
           <>
-            <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[0.55rem] font-bold shrink-0" style={{ background: m.color }}>
-              {m.name[0]}
+            <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[0.55rem] font-bold shrink-0" style={{ background: color }}>
+              {assignee[0]}
             </span>
-            <span className="text-xs font-medium text-foreground">{m.name}</span>
+            <span className="text-xs font-medium text-foreground">{assignee}</span>
           </>
         ) : (
           <span className="text-xs text-muted-foreground">— Ingen —</span>
@@ -86,17 +88,17 @@ function InlineAssignee({
           >
             — Ingen —
           </button>
-          {team.map(tm => (
+          {ASSIGNEE_OPTIONS.map(name => (
             <button
-              key={tm.id}
-              onClick={() => { onChange(clientId, tm.id); setOpen(false) }}
+              key={name}
+              onClick={() => { onChange(clientId, name); setOpen(false) }}
               className="w-full text-left px-3 py-1.5 hover:bg-muted transition-colors flex items-center gap-2"
             >
-              <span className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[0.5rem] font-bold shrink-0" style={{ background: tm.color }}>
-                {tm.name[0]}
+              <span className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[0.5rem] font-bold shrink-0" style={{ background: TEAM_FARGER[name] ?? "#888" }}>
+                {name[0]}
               </span>
-              <span className="text-xs">{tm.name}</span>
-              {clientAssignee === tm.id && <span className="ml-auto text-primary">✓</span>}
+              <span className="text-xs">{name}</span>
+              {assignee === name && <span className="ml-auto text-primary">✓</span>}
             </button>
           ))}
         </div>
@@ -106,7 +108,7 @@ function InlineAssignee({
 }
 
 export default function ClientTable({
-  clients, team, fil, q, sortCol, sortDir, filterAssignee, filterTeam,
+  clients, fil, q, sortCol, sortDir, filterAssignee, filterTeam,
   onSort, onAdvance, onNewCycle, onReview, onEdit, onBoard, onWorkspace, onAssigneeChange,
 }: Props) {
   const list = cfGetList(clients, fil, q, sortCol, sortDir, filterAssignee, filterTeam)
@@ -211,7 +213,7 @@ export default function ClientTable({
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <InlineAssignee clientId={c.id} clientAssignee={c.assignee} team={team} onChange={onAssigneeChange} />
+                  <InlineAssignee clientId={c.id} assignee={c.assignee} onChange={onAssigneeChange} />
                 </td>
                 <td className="px-4 py-3">
                   {c.s === "review" ? (
