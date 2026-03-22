@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import {
   ChevronDown, RotateCcw, Search, CheckCircle2, Clock,
-  LayoutGrid, List, GripVertical, X, Users, Bell,
+  LayoutGrid, List, GripVertical, X, Users, Bell, CheckCheck,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -63,7 +63,7 @@ function ConfirmDialog({ name, onConfirm, onClose }: { name: string; onConfirm: 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
-  const { db, toggleTask, resetObState, removeFromOnboarding, updateObEnrollments, addNotification, markPageRead } = useDB()
+  const { db, toggleTask, resetObState, completeAllObTasks, removeFromOnboarding, updateObEnrollments, addNotification, markPageRead } = useDB()
   const { user } = useAuth()
   const router = useRouter()
 
@@ -385,6 +385,19 @@ export default function OnboardingPage() {
                       >
                         <Bell className="h-3.5 w-3.5" />
                       </Button>
+                      {tab === "pågående" && (
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-7 w-7 rounded-lg text-muted-foreground hover:text-emerald-600"
+                          title="Markera alla uppgifter som klara"
+                          onClick={() => {
+                            completeAllObTasks(entry.kundId)
+                            toast.success(`${entry.name} markerad som klar`)
+                          }}
+                        >
+                          <CheckCheck className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       {tab === "klara" && (
                         <Button
                           variant="ghost" size="icon"
@@ -558,6 +571,19 @@ export default function OnboardingPage() {
                         >
                           <Bell className="h-3.5 w-3.5" />
                         </Button>
+                        {tab === "pågående" && (
+                          <Button
+                            variant="ghost" size="icon"
+                            className="h-7 w-7 rounded-lg text-muted-foreground hover:text-emerald-600"
+                            title="Markera alla uppgifter som klara"
+                            onClick={() => {
+                              completeAllObTasks(entry.kundId)
+                              toast.success(`${entry.name} markerad som klar`)
+                            }}
+                          >
+                            <CheckCheck className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         {tab === "klara" && (
                           <Button
                             variant="ghost" size="icon"

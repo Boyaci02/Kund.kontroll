@@ -48,6 +48,7 @@ export interface DBContextValue {
   deleteKund: (id: number) => void
   toggleTask: (kundId: number, taskId: string) => void
   resetObState: (kundId: number) => void
+  completeAllObTasks: (kundId: number) => void
   toggleContact: (key: string) => void
   moveToVecka: (kundName: string, from: keyof Veckoschema | null, to: keyof Veckoschema) => void
   exportData: () => void

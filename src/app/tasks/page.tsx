@@ -606,7 +606,8 @@ export default function TasksPage() {
   // ── Virtual OB tasks (computed from obState, not stored separately) ─────────
   const obVirtualTasks = useMemo<Task[]>(() => {
     const result: Task[] = []
-    db.clients.filter(c => c.st === "AKTIV").forEach(client => {
+    const enrolledIds = new Set((db.obEnrollments ?? []).map(e => e.kundId))
+    db.clients.filter(c => enrolledIds.has(c.id)).forEach(client => {
       let localIdx = 0
       OB_STEG.forEach(step => {
         step.tasks.forEach(task => {

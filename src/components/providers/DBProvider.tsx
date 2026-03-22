@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 import { DBContext, loadDB, saveDB, getInitialDB } from "@/lib/store"
 import type { AppNotification, DB, GmbReview, Kund, KontaktPost, KontaktTyp, Lead, ObEnrollment, Veckoschema } from "@/lib/types"
-import { SCHEMA, KONTAKTER } from "@/lib/data"
+import { SCHEMA, KONTAKTER, OB_STEG } from "@/lib/data"
 import { supabase } from "@/lib/supabase"
 import { parseNrDates } from "@/lib/nr-parser"
 
@@ -31,12 +31,24 @@ function rowToKund(row: Record<string, unknown>): Kund {
   }
 }
 
-// ── Onboarding-state: separat Supabase-rad för att undvika överskrivning ──────
-async function saveObData(db: { obState: DB["obState"]; obEnrollments: DB["obEnrollments"] }) {
-  await supabase
-    .from("app_state")
-    .upsert({ id: "ob_state", data: { obState: db.obState, obEnrollments: db.obEnrollments }, updated_at: new Date().toISOString() })
-    .then((r) => { if (r?.error) console.error("[sync:ob_state] upsert failed:", r.error) })
+// ── Onboarding-tabeller: sparar till ob_enrollments / ob_task_state ───────────
+async function saveEnrollment(e: ObEnrollment) {
+  await supabase.from("ob_enrollments").upsert({
+    id: e.id, kund_id: e.kundId, name: e.name, pkg: e.pkg,
+    added_at: e.addedAt, priority: e.priority, order: e.order,
+  }).then((r) => { if (r?.error) console.error("[sync:ob_enrollments] upsert failed:", r.error) })
+}
+
+async function saveTaskState(kundId: number, state: Record<string, boolean>) {
+  await supabase.from("ob_task_state")
+    .upsert({ kund_id: kundId, state, updated_at: new Date().toISOString() })
+    .then((r) => { if (r?.error) console.error("[sync:ob_task_state] upsert failed:", r.error) })
+}
+
+async function saveLead(lead: Lead) {
+  await supabase.from("leads")
+    .upsert({ id: lead.id, name: lead.name, status: lead.status, email: lead.email, phone: lead.phone, notes: lead.notes, created_at: lead.createdAt })
+    .then((r) => { if (r?.error) console.error("[sync:leads] upsert failed:", r.error) })
 }
 
 // ── Auto-reset helpers ─────────────────────────────────────────────────────────
@@ -87,16 +99,21 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
       setDB(local)
       dbRef.current = local
 
-      // 2. Hämta från Supabase — main + ob_state + kunder parallellt
-      const [mainRes, obRes, kunderRes] = await Promise.all([
+      // 2. Hämta från Supabase — main + ob-tabeller + kunder + leads parallellt
+      const [mainRes, enrollRes, taskStateRes, kunderRes, leadsRes] = await Promise.all([
         supabase.from("app_state").select("data").eq("id", "main").single(),
-        supabase.from("app_state").select("data").eq("id", "ob_state").single(),
+        supabase.from("ob_enrollments").select("*").order('"order"'),
+        supabase.from("ob_task_state").select("*"),
         supabase.from("kunder").select("*").order("id"),
+        supabase.from("leads").select("*").order("id"),
       ])
 
       let current = local
       if (!mainRes.error && mainRes.data?.data && Object.keys(mainRes.data.data).length > 0) {
-        current = mainRes.data.data as DB
+        // Exkludera leads från app_state.main — leads ägs av leads-tabellen
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { leads: _leads, ...mainWithoutLeads } = mainRes.data.data as DB
+        current = { ...current, ...mainWithoutLeads }
       }
 
       // Kunder-tabell: använd som auktoritativ källa för clients
@@ -104,22 +121,41 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         current = { ...current, clients: kunderRes.data.map(rowToKund) }
       }
 
-      // ob_state-raden är auktoritativ för onboarding — överskriver aldrig av main-reset
-      type ObData = { obState?: DB["obState"]; obEnrollments?: DB["obEnrollments"] }
-      if (!obRes.error && obRes.data?.data) {
-        const ob = obRes.data.data as ObData
-        if (ob.obState !== undefined) current = { ...current, obState: ob.obState }
-        // Använd ob_state-listan BARA om den är icke-tom, eller om main också är tom
-        // → förhindrar att en tom ob_state-rad raderar befintlig data
-        if (Array.isArray(ob.obEnrollments)) {
-          if (ob.obEnrollments.length > 0 || (current.obEnrollments ?? []).length === 0) {
-            current = { ...current, obEnrollments: ob.obEnrollments }
-          }
-          // annars: ob_state är tom men main har data → behåll main-datan
+      // ob_enrollments-tabellen är auktoritativ för onboarding-kön
+      if (!enrollRes.error && enrollRes.data) {
+        const enrollments: ObEnrollment[] = enrollRes.data.map((r: Record<string, unknown>) => ({
+          id: r.id as number,
+          kundId: r.kund_id as number,
+          name: r.name as string,
+          pkg: (r.pkg as string) ?? "",
+          addedAt: (r.added_at as string) ?? "",
+          priority: (r.priority as ObEnrollment["priority"]) ?? "normal",
+          order: (r.order as number) ?? 0,
+        }))
+        current = { ...current, obEnrollments: enrollments }
+      }
+      // ob_task_state-tabellen är auktoritativ för uppgiftsstatus
+      if (!taskStateRes.error && taskStateRes.data) {
+        const obState: DB["obState"] = {}
+        for (const row of taskStateRes.data as Array<{ kund_id: number; state: Record<string, boolean> }>) {
+          obState[row.kund_id] = row.state
         }
-      } else {
-        // Engångsmigration: ob_state-raden finns inte än → seed från main
-        await saveObData({ obState: current.obState, obEnrollments: current.obEnrollments ?? [] })
+        current = { ...current, obState }
+      }
+
+      // leads-tabellen är auktoritativ för leads
+      if (!leadsRes.error && leadsRes.data && leadsRes.data.length > 0) {
+        const leads: Lead[] = (leadsRes.data as Array<Record<string, unknown>>).map((r) => ({
+          id: r.id as number,
+          name: r.name as string,
+          status: (r.status as Lead["status"]) ?? "Ny lead",
+          email: (r.email as string) ?? "",
+          phone: (r.phone as string) ?? "",
+          notes: (r.notes as string) ?? "",
+          createdAt: (r.created_at as string) ?? "",
+        }))
+        const maxId = Math.max(...leads.map((l) => l.id), current.nextLeadId ?? 1)
+        current = { ...current, leads, nextLeadId: maxId + 1 }
       }
 
       // Seed contacts from static KONTAKTER if not yet initialized
@@ -278,33 +314,63 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
       )
       .subscribe()
 
-    const obChannel = supabase
-      .channel("ob_state_changes")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "app_state", filter: "id=eq.ob_state" },
-        (payload) => {
-          const row = payload.new as { id?: string; data?: unknown }
-          if (row?.id !== "ob_state") return
-          const ob = row.data as { obState?: DB["obState"]; obEnrollments?: DB["obEnrollments"] }
-          if (!ob) return
-          setDB((prev) => ({
-            ...prev,
-            ...(ob.obState !== undefined ? { obState: ob.obState } : {}),
-            ...(ob.obEnrollments !== undefined ? { obEnrollments: ob.obEnrollments } : {}),
-          }))
-          dbRef.current = {
-            ...dbRef.current,
-            ...(ob.obState !== undefined ? { obState: ob.obState } : {}),
-            ...(ob.obEnrollments !== undefined ? { obEnrollments: ob.obEnrollments } : {}),
-          }
+    const enrollChannel = supabase
+      .channel("ob_enrollments_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "ob_enrollments" }, async () => {
+        const { data } = await supabase.from("ob_enrollments").select("*").order('"order"')
+        if (!data) return
+        const enrollments: ObEnrollment[] = data.map((r: Record<string, unknown>) => ({
+          id: r.id as number,
+          kundId: r.kund_id as number,
+          name: r.name as string,
+          pkg: (r.pkg as string) ?? "",
+          addedAt: (r.added_at as string) ?? "",
+          priority: (r.priority as ObEnrollment["priority"]) ?? "normal",
+          order: (r.order as number) ?? 0,
+        }))
+        setDB((prev) => ({ ...prev, obEnrollments: enrollments }))
+        dbRef.current = { ...dbRef.current, obEnrollments: enrollments }
+      })
+      .subscribe()
+
+    const taskChannel = supabase
+      .channel("ob_task_state_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "ob_task_state" }, async () => {
+        const { data } = await supabase.from("ob_task_state").select("*")
+        if (!data) return
+        const obState: DB["obState"] = {}
+        for (const row of data as Array<{ kund_id: number; state: Record<string, boolean> }>) {
+          obState[row.kund_id] = row.state
         }
-      )
+        setDB((prev) => ({ ...prev, obState }))
+        dbRef.current = { ...dbRef.current, obState }
+      })
+      .subscribe()
+
+    const leadsChannel = supabase
+      .channel("leads_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, async () => {
+        const { data } = await supabase.from("leads").select("*").order("id")
+        if (!data) return
+        const leads: Lead[] = (data as Array<Record<string, unknown>>).map((r) => ({
+          id: r.id as number,
+          name: r.name as string,
+          status: (r.status as Lead["status"]) ?? "Ny lead",
+          email: (r.email as string) ?? "",
+          phone: (r.phone as string) ?? "",
+          notes: (r.notes as string) ?? "",
+          createdAt: (r.created_at as string) ?? "",
+        }))
+        setDB((prev) => ({ ...prev, leads }))
+        dbRef.current = { ...dbRef.current, leads }
+      })
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
-      supabase.removeChannel(obChannel)
+      supabase.removeChannel(enrollChannel)
+      supabase.removeChannel(taskChannel)
+      supabase.removeChannel(leadsChannel)
     }
   }, [])
 
@@ -313,9 +379,11 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
     saveDB(next)
     dbRef.current = next
     setDB(next)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { leads: _leads, ...stateForAppState } = next
     supabase
       .from("app_state")
-      .upsert({ id: "main", data: next, updated_at: new Date().toISOString() })
+      .upsert({ id: "main", data: stateForAppState, updated_at: new Date().toISOString() })
       .then((result) => {
         if (result?.error) console.error("[sync:main] upsert failed:", result.error)
       })
@@ -398,7 +466,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
           obState: { ...prev.obState, [kundId]: { ...state, [taskId]: !state[taskId] } },
         }
       })
-      setTimeout(() => saveObData({ obState: dbRef.current.obState, obEnrollments: dbRef.current.obEnrollments ?? [] }), 0)
+      setTimeout(() => saveTaskState(kundId, dbRef.current.obState[kundId] ?? {}), 0)
     },
     [update]
   )
@@ -409,7 +477,17 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         obState: { ...prev.obState, [kundId]: {} },
       }))
-      setTimeout(() => saveObData({ obState: dbRef.current.obState, obEnrollments: dbRef.current.obEnrollments ?? [] }), 0)
+      setTimeout(() => saveTaskState(kundId, {}), 0)
+    },
+    [update]
+  )
+
+  const completeAllObTasks = useCallback(
+    (kundId: number) => {
+      const allTaskIds = OB_STEG.flatMap((s) => s.tasks.map((t) => t.id))
+      const completeState = Object.fromEntries(allTaskIds.map((id) => [id, true]))
+      update((prev) => ({ ...prev, obState: { ...prev.obState, [kundId]: completeState } }))
+      setTimeout(() => saveTaskState(kundId, completeState), 0)
     },
     [update]
   )
@@ -479,11 +557,13 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   const addLead = useCallback(
     (lead: Omit<Lead, "id">) => {
+      const newLead = { ...lead, id: dbRef.current.nextLeadId ?? 1 }
       update((prev) => ({
         ...prev,
-        leads: [...(prev.leads ?? []), { ...lead, id: prev.nextLeadId ?? 1 }],
+        leads: [...(prev.leads ?? []), newLead],
         nextLeadId: (prev.nextLeadId ?? 1) + 1,
       }))
+      setTimeout(() => saveLead(newLead), 0)
     },
     [update]
   )
@@ -494,6 +574,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         leads: (prev.leads ?? []).map((l) => (l.id === lead.id ? lead : l)),
       }))
+      setTimeout(() => saveLead(lead), 0)
     },
     [update]
   )
@@ -504,6 +585,10 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         leads: (prev.leads ?? []).filter((l) => l.id !== id),
       }))
+      setTimeout(async () => {
+        await supabase.from("leads").delete().eq("id", id)
+          .then((r) => { if (r?.error) console.error("[sync:leads] delete failed:", r.error) })
+      }, 0)
     },
     [update]
   )
@@ -582,7 +667,10 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         }
         return { ...prev, obEnrollments: [...enrollments, entry] }
       })
-      setTimeout(() => saveObData({ obState: dbRef.current.obState, obEnrollments: dbRef.current.obEnrollments ?? [] }), 0)
+      setTimeout(() => {
+        const entry = dbRef.current.obEnrollments?.find((e) => e.kundId === kundId)
+        if (entry) saveEnrollment(entry)
+      }, 0)
     },
     [update]
   )
@@ -593,7 +681,10 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         obEnrollments: (prev.obEnrollments ?? []).filter((e) => e.id !== id),
       }))
-      setTimeout(() => saveObData({ obState: dbRef.current.obState, obEnrollments: dbRef.current.obEnrollments ?? [] }), 0)
+      setTimeout(async () => {
+        await supabase.from("ob_enrollments").delete().eq("id", id)
+          .then((r) => { if (r?.error) console.error("[sync:ob_enrollments] delete failed:", r.error) })
+      }, 0)
     },
     [update]
   )
@@ -601,7 +692,14 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
   const updateObEnrollments = useCallback(
     (enrollments: ObEnrollment[]) => {
       update((prev) => ({ ...prev, obEnrollments: enrollments }))
-      setTimeout(() => saveObData({ obState: dbRef.current.obState, obEnrollments: enrollments }), 0)
+      setTimeout(() => {
+        supabase.from("ob_enrollments").upsert(
+          enrollments.map((e) => ({
+            id: e.id, kund_id: e.kundId, name: e.name, pkg: e.pkg,
+            added_at: e.addedAt, priority: e.priority, order: e.order,
+          }))
+        ).then((r) => { if (r?.error) console.error("[sync:ob_enrollments] upsert failed:", r.error) })
+      }, 0)
     },
     [update]
   )
@@ -633,18 +731,26 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
   const importLeads = useCallback(
     (incoming: Omit<Lead, "id">[]): number => {
       let imported = 0
+      let newLeads: Lead[] = []
       update((prev) => {
         const existing = new Set((prev.leads ?? []).map((l) => l.name.toLowerCase()))
         const toAdd = incoming.filter((l) => !existing.has(l.name.toLowerCase()))
         imported = toAdd.length
         let nextId = prev.nextLeadId ?? 1
-        const newLeads = toAdd.map((l) => ({ ...l, id: nextId++ }))
+        newLeads = toAdd.map((l) => ({ ...l, id: nextId++ }))
         return {
           ...prev,
           leads: [...(prev.leads ?? []), ...newLeads],
           nextLeadId: nextId,
         }
       })
+      if (newLeads.length > 0) {
+        setTimeout(() => {
+          supabase.from("leads").upsert(
+            newLeads.map((l) => ({ id: l.id, name: l.name, status: l.status, email: l.email, phone: l.phone, notes: l.notes, created_at: l.createdAt }))
+          ).then((r) => { if (r?.error) console.error("[sync:leads] import upsert failed:", r.error) })
+        }, 0)
+      }
       return imported
     },
     [update]
@@ -652,7 +758,7 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DBContext.Provider
-      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads, addContact, updateContact, deleteContact, removeFromVecka, addNotification, markPageRead, enrollInOnboarding, removeFromOnboarding, updateObEnrollments, updateGmbReviews }}
+      value={{ db, addKund, updateKund, deleteKund, toggleTask, resetObState, completeAllObTasks, toggleContact, moveToVecka, exportData, importData, addLead, updateLead, deleteLead, importLeads, addContact, updateContact, deleteContact, removeFromVecka, addNotification, markPageRead, enrollInOnboarding, removeFromOnboarding, updateObEnrollments, updateGmbReviews }}
     >
       {children}
     </DBContext.Provider>

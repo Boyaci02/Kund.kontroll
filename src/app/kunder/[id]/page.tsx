@@ -686,6 +686,13 @@ export default function KundkortPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notes])
 
+  // Sync tema from DB when it loads (e.g. after Supabase fetch overwrites localStorage)
+  useEffect(() => {
+    if (!kund?.tema) return
+    setTema(kund.tema)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kund?.tema])
+
   // Autosave tema
   useEffect(() => {
     if (!kund) return
