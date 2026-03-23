@@ -81,5 +81,35 @@ export function useGoogleCalendar() {
     []
   )
 
-  return { events, loading, fetchEvents, createEvent }
+  const updateEvent = useCallback(
+    async (eventId: string, event: NewCalendarEvent): Promise<boolean> => {
+      try {
+        const res = await fetch("/api/calendar", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventId, ...event }),
+        })
+        return res.ok
+      } catch {
+        return false
+      }
+    },
+    []
+  )
+
+  const deleteEvent = useCallback(
+    async (eventId: string): Promise<boolean> => {
+      try {
+        const res = await fetch(`/api/calendar?eventId=${encodeURIComponent(eventId)}`, {
+          method: "DELETE",
+        })
+        return res.ok
+      } catch {
+        return false
+      }
+    },
+    []
+  )
+
+  return { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent }
 }

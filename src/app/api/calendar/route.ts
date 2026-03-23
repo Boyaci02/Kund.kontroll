@@ -100,3 +100,64 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+// PATCH /api/calendar
+// Body: { eventId, summary, start, end, description? }
+export async function PATCH(req: NextRequest) {
+  const calendarId = process.env.GOOGLE_CALENDAR_ID
+  const auth = getAuth()
+
+  if (!calendarId || !auth) {
+    return NextResponse.json({ error: "Google Calendar inte konfigurerat" }, { status: 503 })
+  }
+
+  try {
+    const { eventId, summary, start, end, description } = await req.json() as {
+      eventId: string
+      summary: string
+      start: string
+      end: string
+      description?: string
+    }
+
+    const calendar = google.calendar({ version: "v3", auth })
+    const res = await calendar.events.patch({
+      calendarId,
+      eventId,
+      requestBody: {
+        summary,
+        description: description ?? "",
+        start: { date: start },
+        end: { date: end },
+      },
+    })
+
+    return NextResponse.json({ event: res.data })
+  } catch (err) {
+    console.error("Google Calendar PATCH error:", err)
+    return NextResponse.json({ error: "Kunde inte uppdatera händelse" }, { status: 500 })
+  }
+}
+
+// DELETE /api/calendar?eventId=...
+export async function DELETE(req: NextRequest) {
+  const calendarId = process.env.GOOGLE_CALENDAR_ID
+  const auth = getAuth()
+
+  if (!calendarId || !auth) {
+    return NextResponse.json({ error: "Google Calendar inte konfigurerat" }, { status: 503 })
+  }
+
+  try {
+    const eventId = req.nextUrl.searchParams.get("eventId")
+    if (!eventId) return NextResponse.json({ error: "eventId saknas" }, { status: 400 })
+
+    const calendar = google.calendar({ version: "v3", auth })
+    await calendar.events.delete({ calendarId, eventId })
+
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error("Google Calendar DELETE error:", err)
+    return NextResponse.json({ error: "Kunde inte ta bort händelse" }, { status: 500 })
+  }
+}

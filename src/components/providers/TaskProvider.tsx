@@ -1,29 +1,42 @@
 "use client"
 
-import { createContext, useContext, useCallback } from "react"
-import { useSyncedState } from "@/lib/use-synced-state"
-import { TASKS_KEY, loadTasks } from "@/lib/task-types"
-import type { Task, TaskNote, TaskStatus } from "@/lib/task-types"
-import { newTaskId } from "@/lib/task-types"
+import { createContext, useContext, useCallback, useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
+import { TASKS_KEY } from "@/lib/task-types"
+import type { Task, TaskNote, TaskPriority, TaskStatus } from "@/lib/task-types"
 
-// ── Migration: convert old localStorage format (done/deadline) to new format ──
+// ── Row ↔ Task mapping ────────────────────────────────────────────────────────
 
-function migrateTasks(raw: unknown): Task[] {
-  if (!Array.isArray(raw)) return []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (raw as any[]).map(t => ({
-    id: t.id ?? Date.now(),
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToTask(row: Record<string, any>): Task {
+  return {
+    id: row.id as number,
+    title: (row.title as string) ?? "",
+    description: (row.description as string) ?? "",
+    assignee: (row.assignee as string) ?? "",
+    kundId: (row.kund_id as number | null) ?? null,
+    startDate: (row.start_date as string) ?? "",
+    endDate: (row.end_date as string) ?? "",
+    status: ((row.status as TaskStatus) ?? "not_started"),
+    priority: ((row.priority as TaskPriority) ?? "") as TaskPriority,
+    createdAt: (row.created_at as string) ?? new Date().toISOString(),
+    notes: Array.isArray(row.notes) ? row.notes : [],
+  }
+}
+
+function taskToRow(t: Partial<Task> & { title: string }) {
+  return {
     title: t.title ?? "",
     description: t.description ?? "",
     assignee: t.assignee ?? "",
-    kundId: t.kundId ?? null,
-    startDate: t.startDate ?? "",
-    endDate: t.endDate ?? (t.deadline ?? ""),
-    status: (t.status as TaskStatus) ?? (t.done ? "done" : "not_started"),
+    kund_id: t.kundId ?? null,
+    start_date: t.startDate ?? "",
+    end_date: t.endDate ?? "",
+    status: t.status ?? "not_started",
     priority: t.priority ?? "",
-    createdAt: t.createdAt ?? new Date().toISOString(),
+    created_at: t.createdAt ?? new Date().toISOString(),
     notes: t.notes ?? [],
-  }))
+  }
 }
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -48,61 +61,101 @@ export function useTask() {
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
-// Seed from localStorage for initial value so there's no empty flash
-function getInitialTasks(): Task[] {
-  if (typeof window === "undefined") return []
-  return migrateTasks((() => {
-    try {
-      const raw = localStorage.getItem(TASKS_KEY)
-      return raw ? JSON.parse(raw) : []
-    } catch { return [] }
-  })())
-}
-
 export function TaskProvider({ children }: { children: React.ReactNode }) {
-  const [tasks, setTasksRaw, tasksLoading] = useSyncedState<Task[]>(
-    "tasks",
-    TASKS_KEY,
-    getInitialTasks(),
-    migrateTasks,
-  )
+  const [tasks, setTasksState] = useState<Task[]>([])
+  const [tasksLoading, setTasksLoading] = useState(true)
 
-  const setTasks = useCallback((updated: Task[]) => {
-    setTasksRaw(updated)
-  }, [setTasksRaw])
+  // ── Mount: migrate localStorage → Supabase, then load ──────────────────────
+  useEffect(() => {
+    async function init() {
+      // One-time migration from localStorage
+      if (typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem(TASKS_KEY)
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const rows = parsed.map((t: Task) => ({ ...taskToRow(t), id: t.id }))
+              await supabase.from("tasks").upsert(rows, { onConflict: "id" })
+              localStorage.removeItem(TASKS_KEY)
+            }
+          }
+        } catch {}
+      }
 
-  const addTask = useCallback((partial: Partial<Omit<Task, "id" | "createdAt">> = {}) => {
-    setTasksRaw(prev => [
-      ...prev,
-      {
-        id: newTaskId(),
-        title: "",
-        description: "",
-        assignee: "",
-        kundId: null,
-        startDate: "",
-        endDate: "",
-        status: "not_started",
-        priority: "",
-        createdAt: new Date().toISOString(),
-        ...partial,
-      },
-    ])
-  }, [setTasksRaw])
+      // Load from Supabase
+      const { data } = await supabase.from("tasks").select("*").order("created_at")
+      if (data) setTasksState(data.map(rowToTask))
+      setTasksLoading(false)
+    }
+    init()
+  }, [])
 
-  const updateTask = useCallback((id: number, patch: Partial<Task>) => {
-    setTasksRaw(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
-  }, [setTasksRaw])
+  // ── Realtime subscription ─────────────────────────────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel("tasks_ch")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, (payload) => {
+        if (payload.eventType === "INSERT") {
+          setTasksState(prev => {
+            if (prev.find(t => t.id === (payload.new as Record<string, unknown>).id)) return prev
+            return [...prev, rowToTask(payload.new as Record<string, unknown>)]
+          })
+        } else if (payload.eventType === "UPDATE") {
+          setTasksState(prev => prev.map(t =>
+            t.id === (payload.new as Record<string, unknown>).id ? rowToTask(payload.new as Record<string, unknown>) : t
+          ))
+        } else if (payload.eventType === "DELETE") {
+          setTasksState(prev => prev.filter(t => t.id !== (payload.old as Record<string, unknown>).id))
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
-  const deleteTask = useCallback((id: number) => {
-    setTasksRaw(prev => prev.filter(t => t.id !== id))
-  }, [setTasksRaw])
+  // ── CRUD ──────────────────────────────────────────────────────────────────
+  const addTask = useCallback(async (partial: Partial<Omit<Task, "id" | "createdAt">> = {}) => {
+    const row = taskToRow({ title: "", ...partial, createdAt: new Date().toISOString() })
+    const { data } = await supabase.from("tasks").insert(row).select().single()
+    if (data) setTasksState(prev => [...prev, rowToTask(data)])
+  }, [])
 
-  const addNote = useCallback((taskId: number, note: TaskNote) => {
-    setTasksRaw(prev => prev.map(t =>
-      t.id === taskId ? { ...t, notes: [...(t.notes ?? []), note] } : t
-    ))
-  }, [setTasksRaw])
+  const updateTask = useCallback(async (id: number, patch: Partial<Task>) => {
+    // Optimistic update
+    setTasksState(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
+    const rowPatch: Record<string, unknown> = {}
+    if (patch.title !== undefined) rowPatch.title = patch.title
+    if (patch.description !== undefined) rowPatch.description = patch.description
+    if (patch.assignee !== undefined) rowPatch.assignee = patch.assignee
+    if (patch.kundId !== undefined) rowPatch.kund_id = patch.kundId
+    if (patch.startDate !== undefined) rowPatch.start_date = patch.startDate
+    if (patch.endDate !== undefined) rowPatch.end_date = patch.endDate
+    if (patch.status !== undefined) rowPatch.status = patch.status
+    if (patch.priority !== undefined) rowPatch.priority = patch.priority
+    if (patch.notes !== undefined) rowPatch.notes = patch.notes
+    await supabase.from("tasks").update(rowPatch).eq("id", id)
+  }, [])
+
+  const deleteTask = useCallback(async (id: number) => {
+    setTasksState(prev => prev.filter(t => t.id !== id))
+    await supabase.from("tasks").delete().eq("id", id)
+  }, [])
+
+  const setTasks = useCallback(async (updated: Task[]) => {
+    setTasksState(updated)
+    // Bulk upsert
+    const rows = updated.map(t => ({ ...taskToRow(t), id: t.id }))
+    await supabase.from("tasks").upsert(rows, { onConflict: "id" })
+  }, [])
+
+  const addNote = useCallback(async (taskId: number, note: TaskNote) => {
+    setTasksState(prev => prev.map(t => {
+      if (t.id !== taskId) return t
+      const updated = { ...t, notes: [...(t.notes ?? []), note] }
+      supabase.from("tasks").update({ notes: updated.notes }).eq("id", taskId)
+      return updated
+    }))
+  }, [])
 
   return (
     <TaskContext.Provider value={{ tasks, tasksLoading, addTask, updateTask, deleteTask, setTasks, addNote }}>
@@ -111,5 +164,5 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
-// Keep loadTasks export for backward compat (used in migration)
-export { loadTasks }
+// Keep loadTasks export for backward compat
+export function loadTasks(): Task[] { return [] }

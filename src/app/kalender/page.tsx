@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
-import { ChevronLeft, ChevronRight, Camera, ClipboardCheck, CalendarDays } from "lucide-react"
+import { ChevronLeft, ChevronRight, Camera, ClipboardCheck, CalendarDays, Plus, Pencil, Trash2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useDB } from "@/lib/store"
 import { useTask } from "@/components/providers/TaskProvider"
@@ -11,7 +11,8 @@ import { TEAM_FARGER } from "@/lib/types"
 import { useRouter } from "next/navigation"
 import type { Kund } from "@/lib/types"
 import type { Task } from "@/lib/task-types"
-import type { CalendarEvent } from "@/hooks/useGoogleCalendar"
+import type { CalendarEvent, NewCalendarEvent } from "@/hooks/useGoogleCalendar"
+import { toast } from "sonner"
 
 // ── Swedish locale ─────────────────────────────────────────────────────────────
 const MONTH_NAMES = [
@@ -33,6 +34,124 @@ interface CalEvent {
   task?: Task
   googleEvent?: CalendarEvent
   date?: Date
+}
+
+// ── EventModal: create / edit Google Calendar events ──────────────────────────
+function EventModal({
+  initial,
+  defaultDate,
+  onSave,
+  onDelete,
+  onClose,
+}: {
+  initial: CalendarEvent | null
+  defaultDate: string // YYYY-MM-DD
+  onSave: (event: NewCalendarEvent, eventId?: string) => Promise<void>
+  onDelete: (eventId: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [summary, setSummary] = useState(initial?.summary ?? "")
+  const [start, setStart] = useState(initial ? initial.start.slice(0, 10) : defaultDate)
+  const [end, setEnd] = useState(initial ? initial.end.slice(0, 10) : defaultDate)
+  const [description, setDescription] = useState(initial?.description ?? "")
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    if (!summary.trim()) return
+    setSaving(true)
+    await onSave({ summary: summary.trim(), start, end: end || start, description }, initial?.id)
+    setSaving(false)
+  }
+
+  async function handleDelete() {
+    if (!initial || !confirm(`Ta bort "${initial.summary}"?`)) return
+    setSaving(true)
+    await onDelete(initial.id)
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden">
+        <div className="flex items-center justify-between p-5 border-b border-border">
+          <h2 className="font-semibold text-foreground text-sm">{initial ? "Redigera händelse" : "Ny händelse"}</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Titel *</label>
+            <input
+              autoFocus
+              value={summary}
+              onChange={e => setSummary(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleSave()}
+              className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              placeholder="Händelsens namn…"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Startdatum</label>
+              <input
+                type="date"
+                value={start}
+                onChange={e => setStart(e.target.value)}
+                className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Slutdatum</label>
+              <input
+                type="date"
+                value={end}
+                min={start}
+                onChange={e => setEnd(e.target.value)}
+                className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Beskrivning</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={3}
+              className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+              placeholder="Valfri beskrivning…"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between px-5 py-4 border-t border-border">
+          <div>
+            {initial && (
+              <button
+                onClick={handleDelete}
+                disabled={saving}
+                className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors disabled:opacity-40"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Ta bort
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="text-sm px-4 py-1.5 border border-border rounded-xl hover:bg-muted transition-colors">
+              Avbryt
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!summary.trim() || saving}
+              className="text-sm px-4 py-1.5 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-opacity font-medium disabled:opacity-40"
+            >
+              {saving ? "Sparar…" : "Spara"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── Build cells for a month ────────────────────────────────────────────────────
@@ -134,6 +253,8 @@ function DayPanel({
   events,
   onClose,
   router,
+  onNewEvent,
+  onEditEvent,
 }: {
   day: number
   month: number
@@ -141,8 +262,11 @@ function DayPanel({
   events: CalEvent[]
   onClose: () => void
   router: ReturnType<typeof useRouter>
+  onNewEvent: (date: string) => void
+  onEditEvent: (ev: CalendarEvent) => void
 }) {
   const date = new Date(year, month, day)
+  const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
   const dateLabel = date.toLocaleDateString("sv-SE", {
     weekday: "long",
     day: "numeric",
@@ -160,12 +284,21 @@ function DayPanel({
         <div>
           <p className="text-xs font-semibold text-foreground capitalize">{dateLabel}</p>
         </div>
-        <button
-          onClick={onClose}
-          className="h-6 w-6 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground transition-colors text-sm"
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onNewEvent(dateStr)}
+            className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
+            title="Lägg till Google-händelse"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={onClose}
+            className="h-6 w-6 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground transition-colors text-sm"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -239,12 +372,19 @@ function DayPanel({
             <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-2">Google Kalender</p>
             <div className="space-y-2">
               {googleEvents.map((e) => (
-                <div
+                <button
                   key={e.id}
-                  className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5"
+                  onClick={() => e.googleEvent && onEditEvent(e.googleEvent)}
+                  className="w-full text-left rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 hover:bg-primary/10 transition-colors group"
                 >
-                  <p className="text-sm font-semibold text-foreground">{e.googleEvent?.summary}</p>
-                </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-foreground">{e.googleEvent?.summary}</p>
+                    <Pencil className="h-3 w-3 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0 mt-0.5" />
+                  </div>
+                  {e.googleEvent?.description && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">{e.googleEvent.description}</p>
+                  )}
+                </button>
               ))}
             </div>
           </div>
@@ -258,7 +398,7 @@ function DayPanel({
 export default function KalenderPage() {
   const { db } = useDB()
   const { tasks } = useTask()
-  const { events: googleEvents, loading, fetchEvents } = useGoogleCalendar()
+  const { events: googleEvents, loading, fetchEvents, createEvent, updateEvent, deleteEvent } = useGoogleCalendar()
   const router = useRouter()
 
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -266,6 +406,48 @@ export default function KalenderPage() {
     return new Date(d.getFullYear(), d.getMonth(), 1)
   })
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalDate, setModalDate] = useState("")
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
+
+  function openNewEvent(date: string) {
+    setEditingEvent(null)
+    setModalDate(date)
+    setModalOpen(true)
+  }
+
+  function openEditEvent(ev: CalendarEvent) {
+    setEditingEvent(ev)
+    setModalDate(ev.start.slice(0, 10))
+    setModalOpen(true)
+  }
+
+  async function handleSaveEvent(event: NewCalendarEvent, eventId?: string) {
+    let ok: boolean
+    if (eventId) {
+      ok = await updateEvent(eventId, event)
+    } else {
+      ok = await createEvent(event)
+    }
+    if (ok) {
+      toast.success(eventId ? "Händelse uppdaterad" : "Händelse skapad")
+      await fetchEvents(currentMonth)
+    } else {
+      toast.error("Kunde inte spara händelsen")
+    }
+    setModalOpen(false)
+  }
+
+  async function handleDeleteEvent(eventId: string) {
+    const ok = await deleteEvent(eventId)
+    if (ok) {
+      toast.success("Händelse borttagen")
+      await fetchEvents(currentMonth)
+    } else {
+      toast.error("Kunde inte ta bort händelsen")
+    }
+    setModalOpen(false)
+  }
 
   const year = currentMonth.getFullYear()
   const month = currentMonth.getMonth()
@@ -481,6 +663,17 @@ export default function KalenderPage() {
           <h1 className="text-lg font-bold text-foreground">
             {MONTH_NAMES[month]} {year}
           </h1>
+          <button
+            onClick={() => {
+              const today = new Date()
+              const d = isCurrentMonth ? today : new Date(year, month, 1)
+              openNewEvent(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`)
+            }}
+            className="ml-auto flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Ny händelse
+          </button>
         </div>
 
         {/* Day headers */}
@@ -567,10 +760,23 @@ export default function KalenderPage() {
               events={selectedDayEvents}
               onClose={() => setSelectedDay(null)}
               router={router}
+              onNewEvent={openNewEvent}
+              onEditEvent={openEditEvent}
             />
           )}
         </div>
       </div>
+
+      {/* Event Modal */}
+      {modalOpen && (
+        <EventModal
+          initial={editingEvent}
+          defaultDate={modalDate}
+          onSave={handleSaveEvent}
+          onDelete={handleDeleteEvent}
+          onClose={() => setModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

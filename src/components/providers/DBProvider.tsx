@@ -101,13 +101,15 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
       setDB(local)
       dbRef.current = local
 
-      // 2. Hämta från Supabase — main + ob-tabeller + kunder + leads parallellt
-      const [mainRes, enrollRes, taskStateRes, kunderRes, leadsRes] = await Promise.all([
+      // 2. Hämta från Supabase — main + ob-tabeller + kunder + leads + veckoschema + kontakter
+      const [mainRes, enrollRes, taskStateRes, kunderRes, leadsRes, veckoRes, kontakRes] = await Promise.all([
         supabase.from("app_state").select("data").eq("id", "main").single(),
         supabase.from("ob_enrollments").select("*").order('"order"'),
         supabase.from("ob_task_state").select("*"),
         supabase.from("kunder").select("*").order("id"),
         supabase.from("leads").select("*").order("id"),
+        supabase.from("veckoschema").select("*"),
+        supabase.from("kontakter").select("*").order("id"),
       ])
 
       let current = local
@@ -160,15 +162,73 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         current = { ...current, leads, nextLeadId: maxId + 1 }
       }
 
-      // Seed contacts from static KONTAKTER if not yet initialized
-      if (!current.contacts || current.contacts.length === 0) {
-        let id = current.nextContactId ?? 1
-        const seeded: KontaktPost[] = [
-          ...KONTAKTER.booking.map((k) => ({ ...k, id: id++, typ: "booking" as KontaktTyp })),
-          ...KONTAKTER.sms.map((k) => ({ ...k, id: id++, typ: "sms" as KontaktTyp })),
-          ...KONTAKTER.quarterly.map((k) => ({ ...k, id: id++, typ: "quarterly" as KontaktTyp })),
-        ]
-        current = { ...current, contacts: seeded, nextContactId: id }
+      // ── veckoschema-tabell är auktoritativ för schema ──────────────────────────
+      if (!veckoRes.error && veckoRes.data) {
+        if (veckoRes.data.length > 0) {
+          // Table has data — use it as authoritative
+          const sched: Veckoschema = { v1: [], v2: [], v3: [], v4: [] }
+          for (const row of veckoRes.data as Array<{ vecka: string; name: string }>) {
+            const v = row.vecka as keyof Veckoschema
+            if (sched[v]) sched[v].push(row.name)
+          }
+          current = { ...current, schedule: sched }
+        } else if (current.schedule) {
+          // Migrate from app_state to veckoschema table
+          const rows: { vecka: string; name: string }[] = []
+          for (const [vecka, names] of Object.entries(current.schedule)) {
+            for (const name of names as string[]) {
+              rows.push({ vecka, name })
+            }
+          }
+          if (rows.length > 0) {
+            await supabase.from("veckoschema").insert(rows)
+          }
+        }
+      }
+
+      // ── kontakter-tabell är auktoritativ för contacts ──────────────────────────
+      if (!kontakRes.error && kontakRes.data) {
+        if (kontakRes.data.length > 0) {
+          // Table has data — use it as authoritative
+          const contacts: KontaktPost[] = (kontakRes.data as Array<Record<string, unknown>>).map((r) => ({
+            id: r.id as number,
+            name: (r.name as string) ?? "",
+            day: (r.day as string) ?? "",
+            note: (r.note as string) ?? "",
+            typ: (r.typ as KontaktTyp) ?? "booking",
+          }))
+          current = { ...current, contacts }
+        } else {
+          // Migrate from app_state or seed from KONTAKTER
+          let existingContacts = current.contacts ?? []
+          if (existingContacts.length === 0) {
+            let id = 1
+            existingContacts = [
+              ...KONTAKTER.booking.map((k) => ({ ...k, id: id++, typ: "booking" as KontaktTyp })),
+              ...KONTAKTER.sms.map((k) => ({ ...k, id: id++, typ: "sms" as KontaktTyp })),
+              ...KONTAKTER.quarterly.map((k) => ({ ...k, id: id++, typ: "quarterly" as KontaktTyp })),
+            ]
+          }
+          // Insert without ids (let Supabase generate them)
+          const insertRows = existingContacts.map(({ id: _id, ...rest }) => ({
+            name: rest.name, day: rest.day, note: rest.note, typ: rest.typ,
+          }))
+          if (insertRows.length > 0) {
+            const { data: inserted } = await supabase.from("kontakter").insert(insertRows).select()
+            if (inserted) {
+              current = {
+                ...current,
+                contacts: (inserted as Array<Record<string, unknown>>).map((r) => ({
+                  id: r.id as number,
+                  name: (r.name as string) ?? "",
+                  day: (r.day as string) ?? "",
+                  note: (r.note as string) ?? "",
+                  typ: (r.typ as KontaktTyp) ?? "booking",
+                })),
+              }
+            }
+          }
+        }
       }
 
       // Migration: ensure obEnrollments exists for existing users (run once)
@@ -205,14 +265,23 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         }
 
         const bookingClients = clientsWithRecordingOnDates(current.clients, twoWeeksAhead)
-        let nextContactId = current.nextContactId ?? 1
-        const newBookingContacts: KontaktPost[] = bookingClients.map((kund) => ({
-          id: nextContactId++,
-          name: kund.name,
-          day: "",
-          note: kund.ph ?? "",
-          typ: "booking" as KontaktTyp,
+        const newBookingInsert = bookingClients.map((kund) => ({
+          name: kund.name, day: "", note: kund.ph ?? "", typ: "booking" as KontaktTyp,
         }))
+
+        // Delete old booking contacts and insert new ones in Supabase
+        await supabase.from("kontakter").delete().eq("typ", "booking")
+        let newBookingContacts: KontaktPost[] = []
+        if (newBookingInsert.length > 0) {
+          const { data: inserted } = await supabase.from("kontakter").insert(newBookingInsert).select()
+          if (inserted) {
+            newBookingContacts = (inserted as Array<Record<string, unknown>>).map((r) => ({
+              id: r.id as number, name: (r.name as string) ?? "",
+              day: (r.day as string) ?? "", note: (r.note as string) ?? "",
+              typ: "booking" as KontaktTyp,
+            }))
+          }
+        }
 
         const nonBooking = (current.contacts ?? []).filter((c) => c.typ !== "booking")
         const cleanedLog = clearConfirmedForType(current.contactLog ?? {}, "booking-")
@@ -220,7 +289,6 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
           ...current,
           contactLog: cleanedLog,
           contacts: [...nonBooking, ...newBookingContacts],
-          nextContactId,
           lastWeeklyResetAt: todayMidnight.toISOString(),
         }
         console.log(`[booking-refresh] ${todayMidnight.toLocaleDateString("sv-SE")} — ${bookingClients.length} bokningskontakter (nr-datum om 2 v)`)
@@ -236,14 +304,22 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         const nextWed2 = new Date(lastWed); nextWed2.setDate(lastWed.getDate() + 7)
 
         const smsClients = clientsWithRecordingOnDates(current.clients, [nextMon, nextTue, nextWed2])
-        let nextContactId = current.nextContactId ?? 1
-        const newSmsContacts: KontaktPost[] = smsClients.map((kund) => ({
-          id: nextContactId++,
-          name: kund.name,
-          day: "",
-          note: kund.ph ?? "",
-          typ: "sms" as KontaktTyp,
+        const newSmsInsert = smsClients.map((kund) => ({
+          name: kund.name, day: "", note: kund.ph ?? "", typ: "sms" as KontaktTyp,
         }))
+
+        await supabase.from("kontakter").delete().eq("typ", "sms")
+        let newSmsContacts: KontaktPost[] = []
+        if (newSmsInsert.length > 0) {
+          const { data: inserted } = await supabase.from("kontakter").insert(newSmsInsert).select()
+          if (inserted) {
+            newSmsContacts = (inserted as Array<Record<string, unknown>>).map((r) => ({
+              id: r.id as number, name: (r.name as string) ?? "",
+              day: (r.day as string) ?? "", note: (r.note as string) ?? "",
+              typ: "sms" as KontaktTyp,
+            }))
+          }
+        }
 
         const nonSms = (current.contacts ?? []).filter((c) => c.typ !== "sms")
         const cleanedLog = clearConfirmedForType(current.contactLog ?? {}, "sms-")
@@ -251,7 +327,6 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
           ...current,
           contactLog: cleanedLog,
           contacts: [...nonSms, ...newSmsContacts],
-          nextContactId,
           lastWedSmsResetAt: lastWed.toISOString(),
         }
         console.log(`[wednesday-reset] ${lastWed.toLocaleDateString("sv-SE")} — ${smsClients.length} SMS-kontakter (mån–ons nästa vecka)`)
@@ -266,14 +341,22 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         const nextFri2 = new Date(lastFri); nextFri2.setDate(lastFri.getDate() + 7)
 
         const smsClients = clientsWithRecordingOnDates(current.clients, [nextThu, nextFri2])
-        let nextContactId = current.nextContactId ?? 1
-        const newSmsContacts: KontaktPost[] = smsClients.map((kund) => ({
-          id: nextContactId++,
-          name: kund.name,
-          day: "",
-          note: kund.ph ?? "",
-          typ: "sms" as KontaktTyp,
+        const newSmsInsert = smsClients.map((kund) => ({
+          name: kund.name, day: "", note: kund.ph ?? "", typ: "sms" as KontaktTyp,
         }))
+
+        await supabase.from("kontakter").delete().eq("typ", "sms")
+        let newSmsContacts: KontaktPost[] = []
+        if (newSmsInsert.length > 0) {
+          const { data: inserted } = await supabase.from("kontakter").insert(newSmsInsert).select()
+          if (inserted) {
+            newSmsContacts = (inserted as Array<Record<string, unknown>>).map((r) => ({
+              id: r.id as number, name: (r.name as string) ?? "",
+              day: (r.day as string) ?? "", note: (r.note as string) ?? "",
+              typ: "sms" as KontaktTyp,
+            }))
+          }
+        }
 
         const nonSms = (current.contacts ?? []).filter((c) => c.typ !== "sms")
         const cleanedLog = clearConfirmedForType(current.contactLog ?? {}, "sms-")
@@ -281,7 +364,6 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
           ...current,
           contactLog: cleanedLog,
           contacts: [...nonSms, ...newSmsContacts],
-          nextContactId,
           lastFriSmsResetAt: lastFri.toISOString(),
         }
         console.log(`[friday-reset] ${lastFri.toLocaleDateString("sv-SE")} — ${smsClients.length} SMS-kontakter (tor–fre nästa vecka)`)
@@ -309,9 +391,13 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
           if (row?.id !== "main") return
           const remote = row.data
           if (!remote || typeof remote !== "object" || Array.isArray(remote)) return
-          setDB(remote as DB)
-          dbRef.current = remote as DB
-          saveDB(remote as DB)
+          // Exclude schedule and contacts — those are owned by dedicated tables
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { schedule: _s, contacts: _c, ...remoteRest } = remote as DB
+          const next = { ...dbRef.current, ...remoteRest }
+          setDB(next)
+          dbRef.current = next
+          saveDB(next)
         }
       )
       .subscribe()
@@ -368,11 +454,45 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
       })
       .subscribe()
 
+    const veckoChannel = supabase
+      .channel("veckoschema_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "veckoschema" }, async () => {
+        const { data } = await supabase.from("veckoschema").select("*")
+        if (!data) return
+        const sched: Veckoschema = { v1: [], v2: [], v3: [], v4: [] }
+        for (const row of data as Array<{ vecka: string; name: string }>) {
+          const v = row.vecka as keyof Veckoschema
+          if (sched[v]) sched[v].push(row.name)
+        }
+        setDB((prev) => ({ ...prev, schedule: sched }))
+        dbRef.current = { ...dbRef.current, schedule: sched }
+      })
+      .subscribe()
+
+    const kontakChannel = supabase
+      .channel("kontakter_changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "kontakter" }, async () => {
+        const { data } = await supabase.from("kontakter").select("*").order("id")
+        if (!data) return
+        const contacts: KontaktPost[] = (data as Array<Record<string, unknown>>).map((r) => ({
+          id: r.id as number,
+          name: (r.name as string) ?? "",
+          day: (r.day as string) ?? "",
+          note: (r.note as string) ?? "",
+          typ: (r.typ as KontaktTyp) ?? "booking",
+        }))
+        setDB((prev) => ({ ...prev, contacts }))
+        dbRef.current = { ...dbRef.current, contacts }
+      })
+      .subscribe()
+
     return () => {
       supabase.removeChannel(channel)
       supabase.removeChannel(enrollChannel)
       supabase.removeChannel(taskChannel)
       supabase.removeChannel(leadsChannel)
+      supabase.removeChannel(veckoChannel)
+      supabase.removeChannel(kontakChannel)
     }
   }, [])
 
@@ -409,9 +529,17 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
     (kund: Kund) => {
       supabase.from("kunder").upsert(kundToRow(kund))
         .then((r) => { if (r?.error) console.error("[sync:kunder] upsert failed:", r.error) })
+      const old = dbRef.current.clients.find((c) => c.id === kund.id)
+      const nameChanged = old && old.name !== kund.name
+      if (nameChanged) {
+        // Update name in veckoschema table
+        supabase.from("veckoschema").update({ name: kund.name }).eq("name", old!.name)
+          .then((r) => { if (r?.error) console.error("[sync:veckoschema] update name failed:", r.error) })
+        // Update name in kontakter table
+        supabase.from("kontakter").update({ name: kund.name }).eq("name", old!.name)
+          .then((r) => { if (r?.error) console.error("[sync:kontakter] update name failed:", r.error) })
+      }
       update((prev) => {
-        const old = prev.clients.find((c) => c.id === kund.id)
-        const nameChanged = old && old.name !== kund.name
         let schedule = prev.schedule
         if (nameChanged && schedule) {
           const oldName = old!.name
@@ -437,6 +565,13 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
     (id: number) => {
       supabase.from("kunder").delete().eq("id", id)
         .then((r) => { if (r?.error) console.error("[sync:kunder] delete failed:", r.error) })
+      const kund = dbRef.current.clients.find((c) => c.id === id)
+      if (kund) {
+        supabase.from("veckoschema").delete().eq("name", kund.name)
+          .then((r) => { if (r?.error) console.error("[sync:veckoschema] delete failed:", r.error) })
+        supabase.from("kontakter").delete().eq("name", kund.name)
+          .then((r) => { if (r?.error) console.error("[sync:kontakter] delete by name failed:", r.error) })
+      }
       update((prev) => {
         const kund = prev.clients.find((c) => c.id === id)
         let schedule = prev.schedule
@@ -516,20 +651,49 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   const moveToVecka = useCallback(
     (kundName: string, from: keyof Veckoschema | null, to: keyof Veckoschema) => {
-      update((prev) => {
+      // Optimistic update
+      setDB((prev) => {
         const sched: Veckoschema = prev.schedule ?? { ...SCHEMA }
         const updated = {
-          v1: [...sched.v1],
-          v2: [...sched.v2],
-          v3: [...sched.v3],
-          v4: [...sched.v4],
+          v1: [...sched.v1], v2: [...sched.v2],
+          v3: [...sched.v3], v4: [...sched.v4],
         }
         if (from) updated[from] = updated[from].filter((n) => n !== kundName)
         if (!updated[to].includes(kundName)) updated[to] = [...updated[to], kundName]
-        return { ...prev, schedule: updated }
+        const next = { ...prev, schedule: updated }
+        dbRef.current = next
+        return next
       })
+      // Sync to veckoschema table: delete old entry, insert new
+      supabase.from("veckoschema").delete().eq("name", kundName).then(() => {
+        supabase.from("veckoschema").insert({ vecka: to, name: kundName })
+          .then((r) => { if (r?.error) console.error("[sync:veckoschema] insert failed:", r.error) })
+      })
+      // Auto-add booking contact if none exists for this customer
+      const contacts = dbRef.current.contacts ?? []
+      if (!contacts.some((c) => c.name === kundName && c.typ === "booking")) {
+        const kund = dbRef.current.clients.find((c) => c.name === kundName)
+        supabase.from("kontakter")
+          .insert({ name: kundName, day: "", note: kund?.ph ?? "", typ: "booking" as KontaktTyp })
+          .select().single()
+          .then(({ data }) => {
+            if (data) {
+              setDB((prev) => {
+                const next = {
+                  ...prev,
+                  contacts: [...(prev.contacts ?? []), {
+                    id: (data as Record<string, unknown>).id as number,
+                    name: kundName, day: "", note: kund?.ph ?? "", typ: "booking" as KontaktTyp,
+                  }],
+                }
+                dbRef.current = next
+                return next
+              })
+            }
+          })
+      }
     },
-    [update]
+    []
   )
 
   const exportData = useCallback(() => {
@@ -597,46 +761,72 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
 
   const addContact = useCallback(
     (contact: Omit<KontaktPost, "id">) => {
-      update((prev) => ({
-        ...prev,
-        contacts: [...(prev.contacts ?? []), { ...contact, id: prev.nextContactId ?? 1 }],
-        nextContactId: (prev.nextContactId ?? 1) + 1,
-      }))
+      supabase.from("kontakter")
+        .insert({ name: contact.name, day: contact.day, note: contact.note, typ: contact.typ })
+        .select().single()
+        .then(({ data }) => {
+          if (data) {
+            const r = data as Record<string, unknown>
+            setDB((prev) => {
+              const next = {
+                ...prev,
+                contacts: [...(prev.contacts ?? []), {
+                  id: r.id as number, name: (r.name as string) ?? "",
+                  day: (r.day as string) ?? "", note: (r.note as string) ?? "",
+                  typ: (r.typ as KontaktTyp) ?? "booking",
+                }],
+              }
+              dbRef.current = next
+              return next
+            })
+          }
+        })
     },
-    [update]
+    []
   )
 
   const updateContact = useCallback(
     (contact: KontaktPost) => {
-      update((prev) => ({
-        ...prev,
-        contacts: (prev.contacts ?? []).map((c) => (c.id === contact.id ? contact : c)),
-      }))
+      // Optimistic update
+      setDB((prev) => {
+        const next = { ...prev, contacts: (prev.contacts ?? []).map((c) => (c.id === contact.id ? contact : c)) }
+        dbRef.current = next
+        return next
+      })
+      supabase.from("kontakter")
+        .update({ name: contact.name, day: contact.day, note: contact.note, typ: contact.typ })
+        .eq("id", contact.id)
+        .then((r) => { if (r?.error) console.error("[sync:kontakter] update failed:", r.error) })
     },
-    [update]
+    []
   )
 
   const deleteContact = useCallback(
     (id: number) => {
-      update((prev) => ({
-        ...prev,
-        contacts: (prev.contacts ?? []).filter((c) => c.id !== id),
-      }))
+      setDB((prev) => {
+        const next = { ...prev, contacts: (prev.contacts ?? []).filter((c) => c.id !== id) }
+        dbRef.current = next
+        return next
+      })
+      supabase.from("kontakter").delete().eq("id", id)
+        .then((r) => { if (r?.error) console.error("[sync:kontakter] delete failed:", r.error) })
     },
-    [update]
+    []
   )
 
   const removeFromVecka = useCallback(
     (kundName: string, from: keyof Veckoschema) => {
-      update((prev) => {
+      // Optimistic update
+      setDB((prev) => {
         const sched: Veckoschema = prev.schedule ?? { ...SCHEMA }
-        return {
-          ...prev,
-          schedule: { ...sched, [from]: sched[from].filter((n) => n !== kundName) },
-        }
+        const next = { ...prev, schedule: { ...sched, [from]: sched[from].filter((n) => n !== kundName) } }
+        dbRef.current = next
+        return next
       })
+      supabase.from("veckoschema").delete().eq("name", kundName)
+        .then((r) => { if (r?.error) console.error("[sync:veckoschema] delete failed:", r.error) })
     },
-    [update]
+    []
   )
 
   const addNotification = useCallback(
