@@ -189,16 +189,25 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
             if (sched[v]) sched[v].push(row.name)
           }
           current = { ...current, schedule: sched }
-        } else if (current.schedule) {
-          // Migrate from app_state to veckoschema table
+        } else {
+          // Table is empty — migrate from app_state if available, otherwise seed from SCHEMA
+          const source = current.schedule ?? { ...SCHEMA }
           const rows: { vecka: string; name: string }[] = []
-          for (const [vecka, names] of Object.entries(current.schedule)) {
+          for (const [vecka, names] of Object.entries(source)) {
             for (const name of names as string[]) {
               rows.push({ vecka, name })
             }
           }
           if (rows.length > 0) {
-            await supabase.from("veckoschema").insert(rows)
+            const { data: inserted } = await supabase.from("veckoschema").insert(rows).select()
+            if (inserted) {
+              const sched: Veckoschema = { v1: [], v2: [], v3: [], v4: [] }
+              for (const row of inserted as Array<{ vecka: string; name: string }>) {
+                const v = row.vecka as keyof Veckoschema
+                if (sched[v]) sched[v].push(row.name)
+              }
+              current = { ...current, schedule: sched }
+            }
           }
         }
       }
