@@ -181,6 +181,7 @@ export interface DB {
   lastWeeklyResetAt?: string
   lastWedSmsResetAt?: string
   lastFriSmsResetAt?: string
+  lastBookingVecka?: string
 }
 
 export const TEAM_FARGER: Record<string, string> = {

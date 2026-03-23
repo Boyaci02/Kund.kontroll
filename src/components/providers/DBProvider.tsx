@@ -53,6 +53,23 @@ async function saveLead(lead: Lead) {
     .then((r) => { if (r?.error) console.error("[sync:leads] upsert failed:", r.error) })
 }
 
+// ── Vecka-helpers ──────────────────────────────────────────────────────────────
+
+// Dag 1-7 = v1, 8-14 = v2, 15-21 = v3, 22-31 = v4
+export function getCurrentVecka(): keyof Veckoschema {
+  const d = new Date().getDate()
+  if (d <= 7) return "v1"
+  if (d <= 14) return "v2"
+  if (d <= 21) return "v3"
+  return "v4"
+}
+
+// 2 veckor framåt med wrap-around: v1→v3, v2→v4, v3→v1, v4→v2
+export function getBookingVecka(): keyof Veckoschema {
+  const n = parseInt(getCurrentVecka()[1])
+  return `v${((n - 1 + 2) % 4) + 1}` as keyof Veckoschema
+}
+
 // ── Auto-reset helpers ─────────────────────────────────────────────────────────
 
 // Returns midnight of the most recent occurrence of targetDay (0=Sun…6=Sat)
@@ -251,49 +268,17 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         await supabase.from("kunder").upsert(current.clients.map(kundToRow))
       }
 
-      // ── Boknings-refresh: kunder med nr-datum 2 veckor framåt (daglig) ─────────
-      const todayMidnight = new Date()
-      todayMidnight.setHours(0, 0, 0, 0)
-
-      if (new Date(current.lastWeeklyResetAt ?? 0) < todayMidnight) {
-        // today+14 (mån om 2 v) → today+20 (sön om 2 v)
-        const twoWeeksAhead: Date[] = []
-        for (let i = 14; i <= 20; i++) {
-          const d = new Date(todayMidnight)
-          d.setDate(todayMidnight.getDate() + i)
-          twoWeeksAhead.push(d)
-        }
-
-        const bookingClients = clientsWithRecordingOnDates(current.clients, twoWeeksAhead)
-        const newBookingInsert = bookingClients.map((kund) => ({
-          name: kund.name, day: "", note: kund.ph ?? "", typ: "booking" as KontaktTyp,
-        }))
-
-        // Delete old booking contacts and insert new ones in Supabase
-        await supabase.from("kontakter").delete().eq("typ", "booking")
-        let newBookingContacts: KontaktPost[] = []
-        if (newBookingInsert.length > 0) {
-          const { data: inserted } = await supabase.from("kontakter").insert(newBookingInsert).select()
-          if (inserted) {
-            newBookingContacts = (inserted as Array<Record<string, unknown>>).map((r) => ({
-              id: r.id as number, name: (r.name as string) ?? "",
-              day: (r.day as string) ?? "", note: (r.note as string) ?? "",
-              typ: "booking" as KontaktTyp,
-            }))
-          }
-        }
-
-        const nonBooking = (current.contacts ?? []).filter((c) => c.typ !== "booking")
-        const cleanedLog = clearConfirmedForType(current.contactLog ?? {}, "booking-")
+      // ── Boknings-vecka-reset: rensa bekräftade bokningar när bokningsveckan byter ─
+      const bookingVecka = getBookingVecka()
+      if (current.lastBookingVecka !== bookingVecka) {
         current = {
           ...current,
-          contactLog: cleanedLog,
-          contacts: [...nonBooking, ...newBookingContacts],
-          lastWeeklyResetAt: todayMidnight.toISOString(),
+          contactLog: clearConfirmedForType(current.contactLog ?? {}, "booking-"),
+          lastBookingVecka: bookingVecka,
         }
-        console.log(`[booking-refresh] ${todayMidnight.toLocaleDateString("sv-SE")} — ${bookingClients.length} bokningskontakter (nr-datum om 2 v)`)
+        console.log(`[booking-vecka] Ny bokningsvecka: ${bookingVecka}`)
       }
-      // ── Slut boknings-refresh ──────────────────────────────────────────────────
+      // ── Slut boknings-vecka-reset ─────────────────────────────────────────────
 
       // ── Onsdag-reset: SMS-kontakter för inspelningar mån–ons nästa vecka ─────
       const lastWed = getLastWeekday(3)
@@ -669,29 +654,6 @@ export function DBProvider({ children }: { children: React.ReactNode }) {
         supabase.from("veckoschema").insert({ vecka: to, name: kundName })
           .then((r) => { if (r?.error) console.error("[sync:veckoschema] insert failed:", r.error) })
       })
-      // Auto-add booking contact if none exists for this customer
-      const contacts = dbRef.current.contacts ?? []
-      if (!contacts.some((c) => c.name === kundName && c.typ === "booking")) {
-        const kund = dbRef.current.clients.find((c) => c.name === kundName)
-        supabase.from("kontakter")
-          .insert({ name: kundName, day: "", note: kund?.ph ?? "", typ: "booking" as KontaktTyp })
-          .select().single()
-          .then(({ data }) => {
-            if (data) {
-              setDB((prev) => {
-                const next = {
-                  ...prev,
-                  contacts: [...(prev.contacts ?? []), {
-                    id: (data as Record<string, unknown>).id as number,
-                    name: kundName, day: "", note: kund?.ph ?? "", typ: "booking" as KontaktTyp,
-                  }],
-                }
-                dbRef.current = next
-                return next
-              })
-            }
-          })
-      }
     },
     []
   )

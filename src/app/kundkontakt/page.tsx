@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useDB } from "@/lib/store"
 import type { KontaktPost, KontaktTyp } from "@/lib/types"
+import { getCurrentVecka, getBookingVecka } from "@/components/providers/DBProvider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -122,6 +123,14 @@ export default function KundkontaktPage() {
   const contactLog = db.contactLog ?? {}
   const contacts = db.contacts ?? []
 
+  const currentVecka = getCurrentVecka()
+  const bookingVecka = getBookingVecka()
+  const schedule = db.schedule ?? { v1: [], v2: [], v3: [], v4: [] }
+  const bookingContacts: KontaktPost[] = (schedule[bookingVecka] ?? []).map((name) => {
+    const kund = db.clients.find((c) => c.name === name)
+    return { id: 0, name, day: "", note: kund?.ph ?? "", typ: "booking" as KontaktTyp }
+  })
+
   const [addingFor, setAddingFor] = useState<KontaktTyp | null>(null)
 
   function handleClearStatus() {
@@ -161,7 +170,9 @@ export default function KundkontaktPage() {
 
       <div className="grid md:grid-cols-3 gap-6">
         {SEKTIONER.map(({ key, label, sub, icon: Icon, color, dot }) => {
-          const sectionContacts = contacts.filter((c) => c.typ === key)
+          const sectionContacts = key === "booking"
+            ? bookingContacts
+            : contacts.filter((c) => c.typ === key)
           return (
             <Card key={key} className="border-border">
               <CardHeader className="pb-3">
@@ -169,7 +180,11 @@ export default function KundkontaktPage() {
                   <Icon className={`h-4 w-4 ${color}`} />
                   {label}
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">{sub}</p>
+                <p className="text-xs text-muted-foreground">
+                  {key === "booking"
+                    ? `Visar ${bookingVecka.toUpperCase()} — vi är i ${currentVecka.toUpperCase()}`
+                    : sub}
+                </p>
               </CardHeader>
               <CardContent className="space-y-2">
                 {sectionContacts.length === 0 ? (
@@ -206,25 +221,29 @@ export default function KundkontaktPage() {
                           {isConfirmed && <CheckCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />}
                           {isContacted && <Clock className="h-3.5 w-3.5 text-yellow-500 shrink-0 mt-0.5" />}
                         </button>
-                        <button
-                          onClick={() => deleteContact(k.id)}
-                          className="p-2 rounded-lg hover:bg-muted text-muted-foreground/50 hover:text-destructive transition-colors shrink-0"
-                          title="Ta bort"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {key !== "booking" && (
+                          <button
+                            onClick={() => deleteContact(k.id)}
+                            className="p-2 rounded-lg hover:bg-muted text-muted-foreground/50 hover:text-destructive transition-colors shrink-0"
+                            title="Ta bort"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     )
                   })
                 )}
 
-                <button
-                  onClick={() => setAddingFor(key)}
-                  className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border/60 rounded-xl py-2 mt-1 transition-colors hover:border-border"
-                >
-                  <Plus className="h-3 w-3" />
-                  Lägg till kontakt
-                </button>
+                {key !== "booking" && (
+                  <button
+                    onClick={() => setAddingFor(key)}
+                    className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border/60 rounded-xl py-2 mt-1 transition-colors hover:border-border"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Lägg till kontakt
+                  </button>
+                )}
               </CardContent>
             </Card>
           )
